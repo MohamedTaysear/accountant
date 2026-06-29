@@ -35,12 +35,16 @@ class ReportsPage(QWidget):
         t = theme._active
         frame = QFrame()
         frame.setStyleSheet(
-            f"QFrame {{ background-color: {t.surface};"
+            f"QFrame {{"
+            f" background-color: {t.surface};"
             f" border: 1px solid {t.border};"
-            f" border-radius: {t.card_border_radius}px; }}")
+            f" border-radius: {t.card_border_radius}px;"
+            f"}}"
+        )
+        frame.setGraphicsEffect(theme.make_card_shadow())
         vl = QVBoxLayout(frame)
-        vl.setContentsMargins(t.spacing_sm, t.spacing_sm, t.spacing_sm, t.spacing_sm)
-        vl.setSpacing(t.spacing_xs)
+        vl.setContentsMargins(t.spacing_md, t.spacing_md, t.spacing_md, t.spacing_md)
+        vl.setSpacing(t.spacing_sm)
 
         hdr_hbox = QHBoxLayout()
         hdr_hbox.setSpacing(t.spacing_xs)
@@ -131,24 +135,29 @@ class ReportsPage(QWidget):
 
         # ── Page header ──────────────────────────────────────────────
         top_row = QHBoxLayout()
-        page_title = QLabel("Reports")
+        page_title = QLabel("📊 Reports Dashboard")
         title_font = QFont(t.font_family, t.size_page_title)
         title_font.setBold(True)
         page_title.setFont(title_font)
-        page_title.setStyleSheet(f"color: {t.text_primary}; background: transparent;")
+        page_title.setStyleSheet(f"color: {t.text_primary}; background: transparent; font-weight: 700;")
         top_row.addWidget(page_title)
         top_row.addStretch()
-        self.export_btn = QPushButton("⬇  Export to CSV")
+        self.export_btn = QPushButton("⬇️ Export to CSV")
         self.export_btn.setProperty("class", "primary")
+        self.export_btn.setCursor(Qt.PointingHandCursor)
         top_row.addWidget(self.export_btn)
         layout.addLayout(top_row)
 
         # ── Filter + Summary card ────────────────────────────────────
         filter_card = QFrame()
         filter_card.setStyleSheet(
-            f"QFrame {{ background-color: {t.surface};"
+            f"QFrame {{"
+            f" background-color: {t.surface};"
             f" border: 1px solid {t.border};"
-            f" border-radius: {t.card_border_radius}px; }}")
+            f" border-radius: {t.card_border_radius}px;"
+            f"}}"
+        )
+        filter_card.setGraphicsEffect(theme.make_card_shadow())
         filter_card_layout = QVBoxLayout(filter_card)
         filter_card_layout.setContentsMargins(
             t.spacing_xl, t.spacing_lg, t.spacing_xl, t.spacing_lg)
@@ -189,6 +198,7 @@ class ReportsPage(QWidget):
 
         self.apply_btn = QPushButton("Apply")
         self.apply_btn.setProperty("class", "primary")
+        self.apply_btn.setCursor(Qt.PointingHandCursor)
         self.apply_btn.setEnabled(False)
         self.apply_btn.setFixedWidth(80)
         filter_bar.addWidget(self.apply_btn)

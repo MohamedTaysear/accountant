@@ -1,4 +1,5 @@
 import traceback
+import qtawesome as qta
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
@@ -14,13 +15,20 @@ from logic import customers_logic
 from ui import theme
 
 
-def _make_card(title: str, value_label: QLabel, wide: bool = False) -> QFrame:
+def _make_card(title: str, value_label: QLabel, wide: bool = False, icon_name: str = "", bg_color: str = None, icon_color: str = None) -> QFrame:
+    t = theme._active
+    
+    # Allow passing custom background color, fallback to surface
+    actual_bg_color = bg_color if bg_color else t.surface
+    
     frame = QFrame()
     frame.setFrameShape(QFrame.NoFrame)
     frame.setStyleSheet(
-        f"QFrame {{ background-color: {theme._active.surface};"
-        f" border: 1px solid {theme._active.border};"
-        f" border-radius: {theme._active.card_border_radius}px; }}"
+        f"QFrame {{"
+        f" background-color: {actual_bg_color};"
+        f" border: 1px solid {t.border};"
+        f" border-radius: {t.card_border_radius}px;"
+        f"}}"
     )
     frame.setSizePolicy(
         QSizePolicy.Expanding if wide else QSizePolicy.Preferred,
@@ -29,49 +37,74 @@ def _make_card(title: str, value_label: QLabel, wide: bool = False) -> QFrame:
     frame.setGraphicsEffect(theme.make_card_shadow())
 
     layout = QVBoxLayout(frame)
-    layout.setContentsMargins(
-        theme._active.spacing_lg, theme._active.spacing_md,
-        theme._active.spacing_lg, theme._active.spacing_md)
-    layout.setSpacing(4)
+    layout.setContentsMargins(t.spacing_lg, t.spacing_lg, t.spacing_lg, t.spacing_lg)
+    layout.setSpacing(t.spacing_sm)
 
+    # Top row: Title and Icon
+    top_layout = QHBoxLayout()
+    top_layout.setContentsMargins(0, 0, 0, 0)
+    
     title_lbl = QLabel(title)
-    title_lbl.setAlignment(Qt.AlignCenter)
+    title_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
     title_lbl.setStyleSheet(
         f"background: transparent; border: none;"
-        f" font-size: {theme._active.size_kpi_label}pt;"
-        f" color: {theme._active.text_secondary};"
-        f" font-weight: bold;"
+        f" font-size: {t.size_kpi_label}pt;"
+        f" color: {t.text_secondary};"
+        f" font-weight: 600;"
         f" text-transform: uppercase;"
         f" letter-spacing: 0.5px;")
 
-    value_label.setAlignment(Qt.AlignCenter)
+    top_layout.addWidget(title_lbl)
+    top_layout.addStretch()
+
+    if icon_name:
+        icon_lbl = QLabel()
+        actual_icon_color = icon_color if icon_color else t.primary
+        icon_lbl.setPixmap(qta.icon(icon_name, color=actual_icon_color).pixmap(24, 24))
+        icon_lbl.setAlignment(Qt.AlignCenter)
+        
+        # Determine background for icon based on its color for contrast
+        # Fallback if no specific logic
+        icon_bg = t.nav_active_bg
+        
+        icon_lbl.setStyleSheet(
+            f"background: {icon_bg}; border: none;"
+            f" border-radius: 6px;"
+            f" padding: 4px;"
+        )
+        icon_lbl.setFixedSize(36, 36)
+        top_layout.addWidget(icon_lbl)
+
+    value_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
     value_label.setStyleSheet(
         f"background: transparent; border: none;"
-        f" font-size: {theme._active.size_kpi_value}pt;"
-        f" font-weight: bold;"
-        f" color: {theme._active.text_primary};")
+        f" font-size: {t.size_kpi_value}pt;"
+        f" font-weight: 700;"
+        f" color: {t.text_primary};")
 
-    layout.addWidget(title_lbl)
+    layout.addLayout(top_layout)
     layout.addWidget(value_label)
     return frame
 
 
 def _section_header(text: str) -> QLabel:
+    t = theme._active
     lbl = QLabel(text)
     lbl.setStyleSheet(
-        f"font-size: {theme._active.size_heading}pt;"
-        f" font-weight: bold;"
-        f" color: {theme._active.text_primary};"
+        f"font-size: {t.size_heading}pt;"
+        f" font-weight: 700;"
+        f" color: {t.text_primary};"
         f" background: transparent;"
-        f" padding-bottom: 2px;"
+        f" padding-bottom: {t.spacing_xs}px;"
     )
     return lbl
 
 
 def _divider() -> QFrame:
+    t = theme._active
     line = QFrame()
     line.setFrameShape(QFrame.HLine)
-    line.setStyleSheet(f"background-color: {theme._active.border}; border: none;")
+    line.setStyleSheet(f"background-color: {t.border}; border: none;")
     line.setFixedHeight(1)
     return line
 
@@ -85,6 +118,7 @@ class DashboardPage(QWidget):
         self._build_ui()
 
     def _build_ui(self):
+        t = theme._active
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -96,25 +130,20 @@ class DashboardPage(QWidget):
         scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
 
         content = QWidget()
-        content.setStyleSheet(f"background-color: {theme._active.background};")
+        content.setStyleSheet(f"background-color: transparent;")
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(
-            theme._active.spacing_xl,
-            theme._active.spacing_xl,
-            theme._active.spacing_xl,
-            theme._active.spacing_xl)
-        layout.setSpacing(theme._active.spacing_xl)
+        layout.setContentsMargins(t.spacing_xl, t.spacing_xl, t.spacing_xl, t.spacing_xl)
+        layout.setSpacing(t.spacing_xl)
 
         scroll.setWidget(content)
         outer.addWidget(scroll)
 
         # ── Page title ───────────────────────────────────────────────
-        page_title = QLabel("Dashboard")
-        title_font = QFont(theme._active.font_family, theme._active.size_page_title)
+        page_title = QLabel("📊 Dashboard Overview")
+        title_font = QFont(t.font_family, t.size_page_title)
         title_font.setBold(True)
         page_title.setFont(title_font)
-        page_title.setStyleSheet(
-            f"color: {theme._active.text_primary}; background: transparent;")
+        page_title.setStyleSheet(f"color: {t.text_primary}; background: transparent; font-weight: 700;")
         layout.addWidget(page_title)
 
         # ── Section: Inventory Overview ──────────────────────────────
@@ -129,18 +158,34 @@ class DashboardPage(QWidget):
         self.lbl_low_stock_count   = QLabel("—")
 
         inventory_grid = QGridLayout()
-        inventory_grid.setSpacing(theme._active.spacing_md)
+        inventory_grid.setSpacing(t.spacing_md)
+        
+        # Colors for the cards
+        if not t.is_dark:
+            c_blue = "#EEF2FF"
+            c_green = "#ECFDF5"
+            c_red = "#FEF2F2"
+            c_yellow = "#FEF9C3"
+            c_purple = "#FAF5FF"
+        else:
+            c_blue = "#1E3A8A"
+            c_green = "#064E3B"
+            c_red = "#7F1D1D"
+            c_yellow = "#713F12"
+            c_purple = "#4C1D95"
+            
         inventory_cards = [
-            ("Total Products",         self.lbl_total_products,    0, 0),
-            ("Active",                 self.lbl_active_products,   0, 1),
-            ("Inactive",               self.lbl_inactive_products, 0, 2),
-            ("Inventory Value",        self.lbl_inventory_value,   0, 3),
-            ("Potential Stock Profit", self.lbl_potential_profit,  0, 4),
-            ("Potential Sales Value",  self.lbl_potential_sales,   0, 5),
-            ("Low Stock Items",        self.lbl_low_stock_count,   0, 6),
+            ("Total Products",         self.lbl_total_products,    0, 0, "fa5s.box", c_blue, "#2563EB"),
+            ("Active",                 self.lbl_active_products,   0, 1, "fa5s.check-circle", c_green, "#059669"),
+            ("Inactive",               self.lbl_inactive_products, 0, 2, "fa5s.times-circle", c_red, "#DC2626"),
+            ("Inventory Value",        self.lbl_inventory_value,   0, 3, "fa5s.money-bill-wave", c_purple, "#7C3AED"),
+            ("Potential Stock Profit", self.lbl_potential_profit,  0, 4, "fa5s.chart-line", c_green, "#059669"),
+            ("Potential Sales Value",  self.lbl_potential_sales,   0, 5, "fa5s.gem", c_yellow, "#D97706"),
+            ("Low Stock Items",        self.lbl_low_stock_count,   0, 6, "fa5s.exclamation-triangle", c_red, "#DC2626"),
         ]
-        for title, lbl, row, col in inventory_cards:
-            inventory_grid.addWidget(_make_card(title, lbl), row, col)
+        
+        for title, lbl, row, col, icon, bg, ic_color in inventory_cards:
+            inventory_grid.addWidget(_make_card(title, lbl, icon_name=icon, bg_color=bg, icon_color=ic_color), row, col)
         layout.addLayout(inventory_grid)
 
         # ── Section: Today's Activity ─────────────────────────────────
@@ -154,21 +199,21 @@ class DashboardPage(QWidget):
         self.lbl_today_net_profit = QLabel("—")
 
         today_grid = QGridLayout()
-        today_grid.setSpacing(theme._active.spacing_md)
+        today_grid.setSpacing(t.spacing_md)
         today_cards = [
-            ("Sales",       self.lbl_today_sales,      0, 0),
-            ("Purchases",   self.lbl_today_purchases,  0, 1),
-            ("Expenses",    self.lbl_today_expenses,   0, 2),
-            ("Gross Profit", self.lbl_today_profit,    0, 3),
-            ("Net Profit",  self.lbl_today_net_profit, 0, 4),
+            ("Sales",       self.lbl_today_sales,      0, 0, "fa5s.shopping-cart", c_green, "#059669"),
+            ("Purchases",   self.lbl_today_purchases,  0, 1, "fa5s.truck", c_blue, "#2563EB"),
+            ("Expenses",    self.lbl_today_expenses,   0, 2, "fa5s.receipt", c_red, "#DC2626"),
+            ("Gross Profit", self.lbl_today_profit,    0, 3, "fa5s.chart-pie", c_purple, "#7C3AED"),
+            ("Net Profit",  self.lbl_today_net_profit, 0, 4, "fa5s.wallet", c_green, "#059669"),
         ]
-        for title, lbl, row, col in today_cards:
-            today_grid.addWidget(_make_card(title, lbl), row, col)
+        for title, lbl, row, col, icon, bg, ic_color in today_cards:
+            today_grid.addWidget(_make_card(title, lbl, icon_name=icon, bg_color=bg, icon_color=ic_color), row, col)
         layout.addLayout(today_grid)
 
         # ── Section: This Month ───────────────────────────────────────
         layout.addWidget(_divider())
-        layout.addWidget(_section_header("This Month"))
+        layout.addWidget(_section_header("Performance Summary"))
 
         self.lbl_this_month_profit     = QLabel("—")
         self.lbl_this_month_expenses   = QLabel("—")
@@ -177,16 +222,16 @@ class DashboardPage(QWidget):
         self.lbl_net_profit            = QLabel("—")
 
         month_grid = QGridLayout()
-        month_grid.setSpacing(theme._active.spacing_md)
+        month_grid.setSpacing(t.spacing_md)
         month_cards = [
-            ("Month Gross Profit",  self.lbl_this_month_profit,     0, 0),
-            ("Month Expenses",      self.lbl_this_month_expenses,   0, 1),
-            ("Month Net Profit",    self.lbl_this_month_net_profit, 0, 2),
-            ("All-Time Gross Profit", self.lbl_total_profit,        0, 3),
-            ("All-Time Net Profit", self.lbl_net_profit,            0, 4),
+            ("Month Gross Profit",  self.lbl_this_month_profit,     0, 0, "fa5s.calendar-alt", None, None),
+            ("Month Expenses",      self.lbl_this_month_expenses,   0, 1, "fa5s.level-down-alt", None, None),
+            ("Month Net Profit",    self.lbl_this_month_net_profit, 0, 2, "fa5s.university", None, None),
+            ("All-Time Gross Profit", self.lbl_total_profit,        0, 3, "fa5s.star", None, None),
+            ("All-Time Net Profit", self.lbl_net_profit,            0, 4, "fa5s.trophy", None, None),
         ]
-        for title, lbl, row, col in month_cards:
-            month_grid.addWidget(_make_card(title, lbl), row, col)
+        for title, lbl, row, col, icon, bg, ic_color in month_cards:
+            month_grid.addWidget(_make_card(title, lbl, icon_name=icon, bg_color=bg, icon_color=ic_color), row, col)
         layout.addLayout(month_grid)
 
         # ── Section: Receivables ─────────────────────────────────────
@@ -197,13 +242,15 @@ class DashboardPage(QWidget):
         self.lbl_customers_with_balance = QLabel("—")
 
         recv_grid = QGridLayout()
-        recv_grid.setSpacing(theme._active.spacing_md)
+        recv_grid.setSpacing(t.spacing_md)
 
-        recv_card = _make_card("Outstanding Receivables", self.lbl_receivables_total)
+        recv_card = _make_card("Outstanding Receivables", self.lbl_receivables_total, icon_name="fa5s.file-invoice-dollar", bg_color=c_yellow, icon_color="#D97706")
         recv_card.setCursor(Qt.PointingHandCursor)
         recv_card.mousePressEvent = lambda e: self._on_receivables_clicked()
         recv_grid.addWidget(recv_card, 0, 0)
-        recv_grid.addWidget(_make_card("Customers With Balance", self.lbl_customers_with_balance), 0, 1)
+        
+        recv_grid.addWidget(_make_card("Customers With Balance", self.lbl_customers_with_balance, icon_name="fa5s.users", bg_color=c_blue, icon_color="#2563EB"), 0, 1)
+        
         for col in range(2, 7):
             from PySide6.QtWidgets import QSpacerItem, QSizePolicy as SP
             recv_grid.addItem(QSpacerItem(0, 0, SP.Expanding, SP.Minimum), 0, col)
@@ -211,7 +258,7 @@ class DashboardPage(QWidget):
 
         # ── Section: Low Stock Products ───────────────────────────────
         layout.addWidget(_divider())
-        layout.addWidget(_section_header("Low Stock Products"))
+        layout.addWidget(_section_header("Alerts: Low Stock Products"))
 
         self.low_stock_table = QTableWidget()
         self.low_stock_table.setColumnCount(4)
@@ -298,9 +345,10 @@ class DashboardPage(QWidget):
             self.lbl_today_net_profit.setText(f"{today_net_profit:,.2f}")
             self.lbl_this_month_net_profit.setText(f"{this_month_net_profit:,.2f}")
 
+            t = theme._active
             kpi_base = (
                 f"background: transparent; border: none;"
-                f" font-size: {theme._active.size_kpi_value}pt; font-weight: bold;")
+                f" font-size: {t.size_kpi_value}pt; font-weight: 700;")
 
             # Profit/net labels get color coding
             for val, lbl in [
@@ -317,10 +365,10 @@ class DashboardPage(QWidget):
             # Low stock count — warning color if any
             if low_stock_count > 0:
                 self.lbl_low_stock_count.setStyleSheet(
-                    f"{kpi_base} color: {theme._active.error};")
+                    f"{kpi_base} color: {t.error};")
             else:
                 self.lbl_low_stock_count.setStyleSheet(
-                    f"{kpi_base} color: {theme._active.success};")
+                    f"{kpi_base} color: {t.success};")
 
             try:
                 self.lbl_receivables_total.setText(
@@ -351,6 +399,7 @@ class DashboardPage(QWidget):
                 item.setToolTip(text)
                 if c == 0:
                     item.setData(Qt.UserRole, row["id"])
+                # Warning for low stock, use error color
                 item.setForeground(QColor(theme._active.error))
                 self.low_stock_table.setItem(r, c, item)
         has_rows = self.low_stock_table.rowCount() > 0
@@ -386,8 +435,13 @@ class DashboardPage(QWidget):
             return
         dlg = QDialog(self)
         dlg.setWindowTitle("Outstanding Receivables")
-        dlg.setMinimumSize(400, 300)
+        dlg.setMinimumSize(500, 400)
         lay = QVBoxLayout(dlg)
+        
+        title_lbl = _QL("Outstanding Receivables")
+        title_lbl.setStyleSheet(f"font-size: {theme._active.size_heading}pt; font-weight: bold; color: {theme._active.text_primary};")
+        lay.addWidget(title_lbl)
+
         if not rows:
             lay.addWidget(_QL("No outstanding receivables."))
         else:
@@ -395,8 +449,8 @@ class DashboardPage(QWidget):
             tbl.setHorizontalHeaderLabels(["Customer", "Outstanding Balance"])
             tbl.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
             tbl.setColumnWidth(1, 160)
-            tbl.setEditTriggers(QTableWidget.NoEditTriggers)
-            tbl.setSelectionBehavior(QTableWidget.SelectRows)
+            theme.apply_table_style(tbl, max_height=300)
+            
             for r, row in enumerate(rows):
                 name_item = QTableWidgetItem(row["name"])
                 name_item.setData(Qt.UserRole, row["id"])
@@ -410,7 +464,10 @@ class DashboardPage(QWidget):
 
             tbl.doubleClicked.connect(_on_double_click)
             lay.addWidget(tbl)
-            lay.addWidget(_QL("Double-click to open customer profile."))
+            
+            help_lbl = _QL("Double-click to open customer profile.")
+            help_lbl.setStyleSheet(f"color: {theme._active.text_secondary}; font-style: italic;")
+            lay.addWidget(help_lbl)
         dlg.exec()
 
     def _on_low_stock_clicked(self, row, col):

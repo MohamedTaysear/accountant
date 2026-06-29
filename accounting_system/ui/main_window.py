@@ -1,13 +1,14 @@
 import os
 import traceback
+import qtawesome as qta
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QStackedWidget, QPushButton, QApplication, QMessageBox,
-    QMenu, QFileDialog, QFrame, QLabel,
+    QMenu, QFileDialog, QFrame, QLabel, QSpacerItem, QSizePolicy
 )
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QAction, QIcon, QFont
+from PySide6.QtCore import Qt, Signal, QSize
+from PySide6.QtGui import QAction, QIcon, QFont, QColor
 
 from ui import theme
 
@@ -33,6 +34,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
 
     def _build_ui(self):
+        t = theme._active
         central = QWidget()
         self.setCentralWidget(central)
         root_layout = QHBoxLayout(central)
@@ -41,54 +43,59 @@ class MainWindow(QMainWindow):
 
         # ── Sidebar ────────────────────────────────────────────────────
         sidebar = QWidget()
-        sidebar.setFixedWidth(theme._active.sidebar_width)
-        sidebar.setStyleSheet(f"background-color: {theme._active.nav_bg};")
+        sidebar.setFixedWidth(t.sidebar_width)
+        # Using a distinct blue color for the sidebar instead of standard gray
+        sidebar.setStyleSheet(f"background-color: #1E3A8A; border-right: none;")
         sidebar_layout = QVBoxLayout(sidebar)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
         sidebar_layout.setSpacing(0)
 
         # App name header
         header_frame = QFrame()
-        header_frame.setStyleSheet(
-            f"background-color: {theme._active.nav_bg};"
-            f" border-bottom: 1px solid rgba(255,255,255,0.08);")
-        header_layout = QVBoxLayout(header_frame)
-        header_layout.setContentsMargins(16, 16, 16, 16)
+        header_frame.setStyleSheet(f"background-color: transparent; border: none;")
+        header_frame.setFixedHeight(64) # Match navbar height
+        header_layout = QHBoxLayout(header_frame)
+        header_layout.setContentsMargins(t.spacing_lg, t.spacing_md, t.spacing_lg, t.spacing_md)
+        header_layout.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        
+        logo_icon = QLabel()
+        logo_icon.setPixmap(qta.icon('fa5s.gem', color='white').pixmap(24, 24))
+        logo_icon.setStyleSheet("background: transparent; border: none;")
+        header_layout.addWidget(logo_icon)
+        
         app_name_lbl = QLabel(config.APP_NAME)
-        app_name_font = QFont(theme._active.font_family, 11)
+        app_name_font = QFont(t.font_family, 12)
         app_name_font.setBold(True)
         app_name_lbl.setFont(app_name_font)
-        app_name_lbl.setStyleSheet(
-            "color: white; background: transparent; border: none;")
+        app_name_lbl.setStyleSheet(f"color: white; font-weight: 700; border: none;")
         app_name_lbl.setWordWrap(True)
         header_layout.addWidget(app_name_lbl)
         sidebar_layout.addWidget(header_frame)
 
         # Navigation section
         nav_widget = QWidget()
-        nav_widget.setStyleSheet("background: transparent;")
+        nav_widget.setStyleSheet("background: transparent; border: none;")
         nav_layout = QVBoxLayout(nav_widget)
-        nav_layout.setContentsMargins(8, 12, 8, 12)
-        nav_layout.setSpacing(2)
+        nav_layout.setContentsMargins(t.spacing_md, t.spacing_lg, t.spacing_md, t.spacing_lg)
+        nav_layout.setSpacing(t.spacing_xs)
 
-        _icons_dir = os.path.join(os.path.dirname(__file__), "icons")
         nav_buttons = [
-            ("Dashboard",  0, "dashboard.svg"),
-            ("Products",   1, "products.svg"),
-            ("Sales",      2, "sales.svg"),
-            ("Purchases",  3, "purchases.svg"),
-            ("Expenses",   4, "expenses.svg"),
-            ("Customers",  5, "customers.svg"),
-            ("Reports",    6, "reports.svg"),
+            ("Dashboard",  0, "fa5s.home"),
+            ("Products",   1, "fa5s.box"),
+            ("Sales",      2, "fa5s.shopping-cart"),
+            ("Purchases",  3, "fa5s.truck"),
+            ("Expenses",   4, "fa5s.receipt"),
+            ("Customers",  5, "fa5s.users"),
+            ("Reports",    6, "fa5s.chart-bar"),
         ]
         self._nav_btns = []
-        for label, idx, icon_file in nav_buttons:
+        for label, idx, icon_name in nav_buttons:
             btn = QPushButton(f"  {label}")
-            icon_path = os.path.join(_icons_dir, icon_file)
-            if os.path.exists(icon_path):
-                btn.setIcon(QIcon(icon_path))
+            btn.setIcon(qta.icon(icon_name, color='white'))
+            btn.setIconSize(QSize(20, 20))
             btn.setStyleSheet(self._nav_btn_normal_style())
-            btn.setMinimumHeight(40)
+            btn.setMinimumHeight(44)
+            btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda checked, i=idx: self._switch_page(i))
             nav_layout.addWidget(btn)
             self._nav_btns.append(btn)
@@ -96,47 +103,89 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(nav_widget)
         sidebar_layout.addStretch()
 
-        # ── Separator ──
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet("background-color: rgba(255,255,255,0.08); border: none;")
-        sep.setFixedHeight(1)
-        sidebar_layout.addWidget(sep)
-
         # Bottom utility buttons
         bottom_widget = QWidget()
-        bottom_widget.setStyleSheet("background: transparent;")
+        bottom_widget.setStyleSheet("background: transparent; border: none;")
         bottom_layout = QVBoxLayout(bottom_widget)
-        bottom_layout.setContentsMargins(8, 8, 8, 12)
-        bottom_layout.setSpacing(2)
+        bottom_layout.setContentsMargins(t.spacing_md, t.spacing_md, t.spacing_md, t.spacing_xl)
+        bottom_layout.setSpacing(t.spacing_sm)
 
-        for label, slot in [("Change Password", self._on_change_password),
-                             ("Logout",          self._on_logout)]:
+        for label, slot, icon_name in [
+            ("Change Password", self._on_change_password, "fa5s.key"),
+            ("Logout",          self._on_logout, "fa5s.sign-out-alt")
+        ]:
             btn = QPushButton(f"  {label}")
+            btn.setIcon(qta.icon(icon_name, color='rgba(255, 255, 255, 0.7)'))
+            btn.setIconSize(QSize(18, 18))
             btn.setStyleSheet(self._utility_btn_style())
-            btn.setMinimumHeight(36)
+            btn.setMinimumHeight(44)
+            btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(slot)
             bottom_layout.addWidget(btn)
 
         backup_btn = QPushButton("  Backup & Restore")
+        backup_btn.setIcon(qta.icon("fa5s.database", color='rgba(255, 255, 255, 0.7)'))
+        backup_btn.setIconSize(QSize(18, 18))
         backup_btn.setStyleSheet(self._utility_btn_style())
-        backup_btn.setMinimumHeight(36)
+        backup_btn.setMinimumHeight(44)
+        backup_btn.setCursor(Qt.PointingHandCursor)
         backup_menu = QMenu(backup_btn)
         backup_menu.setStyleSheet(
-            f"QMenu {{ background-color: white; border: 1px solid {theme._active.border};"
-            f" border-radius: 6px; padding: 4px; }}"
-            f"QMenu::item {{ padding: 6px 20px; color: {theme._active.text_primary}; }}"
-            f"QMenu::item:selected {{ background-color: {theme._active.primary}; color: white; }}")
-        backup_menu.addAction(QAction("Create Backup…", self,
-                                      triggered=self._on_create_backup))
-        backup_menu.addAction(QAction("Restore Backup…", self,
-                                      triggered=self._on_restore_backup))
+            f"QMenu {{ background-color: {t.surface}; border: 1px solid {t.border};"
+            f" border-radius: 8px; padding: 4px; }}"
+            f"QMenu::item {{ padding: 8px 24px; color: {t.text_primary}; border-radius: 4px; }}"
+            f"QMenu::item:selected {{ background-color: {t.nav_active_bg}; color: {t.primary}; }}")
+        
+        backup_menu.addAction(qta.icon("fa5s.download", color=t.text_primary), "Create Backup…", self._on_create_backup)
+        backup_menu.addAction(qta.icon("fa5s.upload", color=t.text_primary), "Restore Backup…", self._on_restore_backup)
+        
         backup_btn.setMenu(backup_menu)
         bottom_layout.addWidget(backup_btn)
 
         sidebar_layout.addWidget(bottom_widget)
 
-        # ── Page stack ─────────────────────────────────────────────────
+        # ── Main Content Area (Navbar + Stack) ──────────────────────────
+        main_area = QWidget()
+        main_area.setStyleSheet(f"background-color: {t.background};")
+        main_layout = QVBoxLayout(main_area)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Top Navbar
+        navbar = QFrame()
+        navbar.setFixedHeight(64)
+        navbar.setStyleSheet(
+            f"background-color: {t.surface}; border-bottom: 1px solid {t.border};"
+        )
+        navbar_layout = QHBoxLayout(navbar)
+        navbar_layout.setContentsMargins(t.spacing_xl, 0, t.spacing_xl, 0)
+        
+        # User greeting
+        greeting_lbl = QLabel(f"Welcome back, {self.username}")
+        greeting_lbl.setStyleSheet(f"color: {t.text_secondary}; font-size: {t.size_section}pt; border: none; background: transparent;")
+        navbar_layout.addWidget(greeting_lbl)
+        
+        navbar_layout.addStretch()
+
+        # Theme Switch Button
+        self.theme_btn = QPushButton("🌙 Dark Mode" if not t.is_dark else "☀️ Light Mode")
+        self.theme_btn.setCursor(Qt.PointingHandCursor)
+        self.theme_btn.setStyleSheet(
+            f"QPushButton {{"
+            f" background-color: transparent; color: {t.text_secondary};"
+            f" border: 1px solid {t.border}; border-radius: 20px; padding: 0 16px;"
+            f"}}"
+            f"QPushButton:hover {{"
+            f" background-color: {t.surface_hover}; color: {t.text_primary};"
+            f"}}"
+        )
+        self.theme_btn.setFixedHeight(40)
+        self.theme_btn.clicked.connect(self._toggle_theme)
+        navbar_layout.addWidget(self.theme_btn)
+
+        main_layout.addWidget(navbar)
+
+        # Page stack
         self.stack = QStackedWidget()
         self.dashboard_page  = DashboardPage()
         self.products_page   = ProductsPage()
@@ -157,17 +206,19 @@ class MainWindow(QMainWindow):
         self._current_nav_idx = 0
         self._nav_btns[0].setStyleSheet(self._nav_btn_active_style())
 
+        main_layout.addWidget(self.stack, 1)
+
         root_layout.addWidget(sidebar)
-        root_layout.addWidget(self.stack, 1)
+        root_layout.addWidget(main_area, 1)
 
     @staticmethod
     def _nav_btn_normal_style() -> str:
         t = theme._active
         return (
-            f"QPushButton {{ color: {t.nav_text}; background: transparent;"
-            f" border: none; border-radius: 6px;"
-            f" text-align: left; padding: 8px 12px; font-size: {t.size_normal}pt; }}"
-            f"QPushButton:hover {{ background-color: rgba(255,255,255,0.10);"
+            f"QPushButton {{ color: rgba(255, 255, 255, 0.7); background: transparent;"
+            f" border: none; border-radius: {t.button_border_radius}px;"
+            f" text-align: left; padding: 8px 16px; font-size: {t.size_section}pt; font-weight: 500; }}"
+            f"QPushButton:hover {{ background-color: rgba(255, 255, 255, 0.1);"
             f" color: white; }}"
         )
 
@@ -175,23 +226,37 @@ class MainWindow(QMainWindow):
     def _nav_btn_active_style() -> str:
         t = theme._active
         return (
-            f"QPushButton {{ color: white; background-color: {t.nav_active};"
-            f" border: none; border-radius: 6px;"
-            f" text-align: left; padding: 8px 12px;"
-            f" font-size: {t.size_normal}pt; font-weight: bold; }}"
+            f"QPushButton {{ color: white; background-color: rgba(255, 255, 255, 0.15);"
+            f" border: none; border-radius: {t.button_border_radius}px;"
+            f" text-align: left; padding: 8px 16px;"
+            f" font-size: {t.size_section}pt; font-weight: 700; }}"
         )
 
     @staticmethod
     def _utility_btn_style() -> str:
         t = theme._active
         return (
-            f"QPushButton {{ color: {t.nav_text}; background: transparent;"
-            f" border: none; border-radius: 6px;"
-            f" text-align: left; padding: 6px 12px; font-size: {t.size_small}pt; }}"
-            f"QPushButton:hover {{ background-color: rgba(255,255,255,0.10);"
+            f"QPushButton {{ color: rgba(255, 255, 255, 0.7); background: transparent;"
+            f" border: none; border-radius: {t.button_border_radius}px;"
+            f" text-align: left; padding: 6px 16px; font-size: {t.size_normal}pt; font-weight: 500; }}"
+            f"QPushButton:hover {{ background-color: rgba(255, 255, 255, 0.1);"
             f" color: white; }}"
             f"QPushButton::menu-indicator {{ image: none; }}"
         )
+
+    def _toggle_theme(self):
+        if theme._active.is_dark:
+            theme.set_theme(theme.LightTheme())
+        else:
+            theme.set_theme(theme.DarkTheme())
+            
+        # Re-apply the stylesheet to the entire app
+        app = QApplication.instance()
+        app.setStyleSheet(theme.build_app_stylesheet())
+        
+        QMessageBox.information(self, "Theme Changed", "Theme has been changed. Some pages might require you to switch to them or restart to fully apply the theme colors.")
+        
+        self.theme_btn.setText("🌙 Dark Mode" if not theme._active.is_dark else "☀️ Light Mode")
 
     def _switch_page(self, index: int):
         self._nav_btns[self._current_nav_idx].setStyleSheet(self._nav_btn_normal_style())

@@ -1,14 +1,11 @@
 import traceback
 
 def _fmt(v) -> str:
-    """Format a number, dropping unnecessary trailing zeros (e.g. 50.00→'50', 6.5→'6.5')."""
     s = f"{v:.2f}"
     return s.rstrip("0").rstrip(".")
 
 def _fmt_total(v) -> str:
-    """Same as _fmt but with thousands separator for the running total label."""
     s = f"{v:,.2f}"
-    # Split on decimal point to strip trailing zeros only from the fractional part
     if "." in s:
         integer_part, frac_part = s.split(".")
         frac_part = frac_part.rstrip("0")
@@ -22,11 +19,10 @@ from PySide6.QtWidgets import (
     QHeaderView, QMessageBox, QApplication, QFrame, QSizePolicy,
 )
 from PySide6.QtCore import Qt, QDate
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QColor
 
 
 class _SpinBox(QDoubleSpinBox):
-    """QDoubleSpinBox that drops unnecessary trailing zeros in its display."""
     def textFromValue(self, value: float) -> str:
         s = f"{value:.2f}"
         return s.rstrip("0").rstrip(".")
@@ -44,49 +40,50 @@ class PurchasesPage(QWidget):
         self._refresh_invoice_number()
 
     def _build_ui(self):
+        t = theme._active
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(
-            theme._active.spacing_xl, theme._active.spacing_xl,
-            theme._active.spacing_xl, theme._active.spacing_xl)
-        layout.setSpacing(theme._active.spacing_lg)
+        layout.setContentsMargins(t.spacing_xl, t.spacing_xl, t.spacing_xl, t.spacing_xl)
+        layout.setSpacing(t.spacing_lg)
 
         # ── Page header ──────────────────────────────────────────────
-        page_title = QLabel("New Purchase Invoice")
-        title_font = QFont(theme._active.font_family, theme._active.size_page_title)
+        page_title = QLabel("🛒 New Purchase Invoice")
+        title_font = QFont(t.font_family, t.size_page_title)
         title_font.setBold(True)
         page_title.setFont(title_font)
-        page_title.setStyleSheet(
-            f"color: {theme._active.text_primary}; background: transparent;")
+        page_title.setStyleSheet(f"color: {t.text_primary}; background: transparent; font-weight: 700;")
         layout.addWidget(page_title)
 
         # ── Invoice header card ──────────────────────────────────────
         header_card = QFrame()
         header_card.setStyleSheet(
-            f"QFrame {{ background-color: {theme._active.surface};"
-            f" border: 1px solid {theme._active.border};"
-            f" border-radius: {theme._active.card_border_radius}px; }}")
+            f"QFrame {{ background-color: {t.surface};"
+            f" border: 1px solid {t.border};"
+            f" border-radius: {t.card_border_radius}px; }}")
+        header_card.setGraphicsEffect(theme.make_card_shadow())
         hc_layout = QHBoxLayout(header_card)
-        hc_layout.setContentsMargins(
-            theme._active.spacing_xl, theme._active.spacing_lg,
-            theme._active.spacing_xl, theme._active.spacing_lg)
-        hc_layout.setSpacing(theme._active.spacing_xxl)
+        hc_layout.setContentsMargins(t.spacing_xl, t.spacing_md, t.spacing_xl, t.spacing_md)
+        hc_layout.setSpacing(t.spacing_xxl)
 
         header_form = QFormLayout()
-        header_form.setSpacing(theme._active.spacing_sm)
+        header_form.setSpacing(t.spacing_md)
         header_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         self.invoice_number_label = QLabel("PUR-000001")
         self.invoice_number_label.setStyleSheet(
-            f"font-weight: bold; color: {theme._active.primary}; background: transparent;")
+            f"font-weight: 700; font-size: {t.size_section}pt; color: {t.primary}; background: transparent;")
         header_form.addRow("Invoice #:", self.invoice_number_label)
 
         self.date_label = QLabel(QDate.currentDate().toString("yyyy-MM-dd"))
-        self.date_label.setStyleSheet("background: transparent;")
+        self.date_label.setStyleSheet(f"background: transparent; color: {t.text_primary}; font-weight: 500;")
         header_form.addRow("Date:", self.date_label)
 
         self.supplier_input = QLineEdit()
         self.supplier_input.setPlaceholderText("Optional supplier name")
         self.supplier_input.setMaximumWidth(280)
+        self.supplier_input.setStyleSheet(
+            f"QLineEdit {{ border: 1px solid {t.border}; border-radius: 8px; padding: 6px 12px; background: {t.background}; }}"
+            f"QLineEdit:focus {{ border-color: {t.primary}; }}"
+        )
         header_form.addRow("Supplier:", self.supplier_input)
 
         hc_layout.addLayout(header_form)
@@ -97,19 +94,21 @@ class PurchasesPage(QWidget):
         # ── Add item row ─────────────────────────────────────────────
         add_card = QFrame()
         add_card.setStyleSheet(
-            f"QFrame {{ background-color: {theme._active.surface};"
-            f" border: 1px solid {theme._active.border};"
-            f" border-radius: {theme._active.card_border_radius}px; }}")
+            f"QFrame {{ background-color: {t.surface};"
+            f" border: 1px solid {t.border};"
+            f" border-radius: {t.card_border_radius}px; }}")
+        add_card.setGraphicsEffect(theme.make_card_shadow())
         add_layout = QHBoxLayout(add_card)
-        add_layout.setContentsMargins(
-            theme._active.spacing_lg, theme._active.spacing_md,
-            theme._active.spacing_lg, theme._active.spacing_md)
-        add_layout.setSpacing(theme._active.spacing_md)
+        add_layout.setContentsMargins(t.spacing_lg, t.spacing_md, t.spacing_lg, t.spacing_md)
+        add_layout.setSpacing(t.spacing_md)
         add_layout.setAlignment(Qt.AlignVCenter)
 
         self.product_combo = QComboBox()
         self.product_combo.setMinimumWidth(260)
         self.product_combo.setEditable(False)
+        self.product_combo.setStyleSheet(
+            f"QComboBox {{ border: 1px solid {t.border}; border-radius: 8px; padding: 6px; background: {t.background}; }}"
+        )
 
         self.qty_spin = _SpinBox()
         self.qty_spin.setRange(0.01, 999_999)
@@ -123,12 +122,13 @@ class PurchasesPage(QWidget):
         self.price_spin.setValue(0.0)
         self.price_spin.setFixedWidth(110)
 
-        self.add_line_btn = QPushButton("+ Add to Invoice")
+        self.add_line_btn = QPushButton("➕ Add to Invoice")
         self.add_line_btn.setProperty("class", "primary")
+        self.add_line_btn.setCursor(Qt.PointingHandCursor)
 
-        def _lbl(t):
-            l = QLabel(t)
-            l.setStyleSheet(f"color: {theme._active.text_secondary}; background: transparent;")
+        def _lbl(lbl_text):
+            l = QLabel(lbl_text)
+            l.setStyleSheet(f"color: {t.text_secondary}; background: transparent; font-weight: 500;")
             return l
 
         add_layout.addWidget(_lbl("Product:"))
@@ -144,14 +144,10 @@ class PurchasesPage(QWidget):
         # ── Line items table ─────────────────────────────────────────
         self.table = QTableWidget()
         self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(
-            ["Product", "Qty", "Unit Price", "Subtotal", ""])
+        self.table.setHorizontalHeaderLabels(["Product", "Qty", "Unit Price", "Subtotal", "Actions"])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        for col, w in [(1, 70), (2, 100), (3, 100), (4, 80)]:
+        for col, w in [(1, 90), (2, 120), (3, 120), (4, 100)]:
             self.table.setColumnWidth(col, w)
-        self.table.setStyleSheet(
-            f"QTableWidget {{ border-radius: {theme._active.card_border_radius}px;"
-            f" border: 1px solid {theme._active.border}; }}")
         theme.apply_table_style(self.table)
         self._empty_table_lbl = theme.make_empty_label("No items added to this invoice yet.")
         layout.addWidget(self.table)
@@ -161,26 +157,27 @@ class PurchasesPage(QWidget):
         # ── Footer / totals ──────────────────────────────────────────
         footer_card = QFrame()
         footer_card.setStyleSheet(
-            f"QFrame {{ background-color: {theme._active.surface};"
-            f" border: 1px solid {theme._active.border};"
-            f" border-radius: {theme._active.card_border_radius}px; }}")
+            f"QFrame {{ background-color: {t.surface};"
+            f" border: 1px solid {t.border};"
+            f" border-radius: {t.card_border_radius}px; }}")
+        footer_card.setGraphicsEffect(theme.make_card_shadow())
         footer = QHBoxLayout(footer_card)
-        footer.setContentsMargins(
-            theme._active.spacing_lg, theme._active.spacing_md,
-            theme._active.spacing_lg, theme._active.spacing_md)
-        footer.setSpacing(theme._active.spacing_md)
+        footer.setContentsMargins(t.spacing_lg, t.spacing_lg, t.spacing_lg, t.spacing_lg)
+        footer.setSpacing(t.spacing_md)
 
         self.total_label = QLabel("Total: 0.00")
-        total_font = QFont(theme._active.font_family, theme._active.size_heading)
+        total_font = QFont(t.font_family, t.size_kpi_value)
         total_font.setBold(True)
         self.total_label.setFont(total_font)
-        self.total_label.setStyleSheet(
-            f"color: {theme._active.primary}; background: transparent;")
+        self.total_label.setStyleSheet(f"color: {t.primary}; background: transparent; font-weight: 700;")
 
-        self.clear_btn = QPushButton("Clear Invoice")
+        self.clear_btn = QPushButton("🧹 Clear Invoice")
         self.clear_btn.setProperty("class", "destructive")
-        self.save_btn  = QPushButton("Save Invoice")
+        self.clear_btn.setCursor(Qt.PointingHandCursor)
+        self.save_btn  = QPushButton("💾 Save Invoice")
         self.save_btn.setProperty("class", "primary")
+        self.save_btn.setCursor(Qt.PointingHandCursor)
+        self.save_btn.setMinimumWidth(150)
 
         footer.addWidget(self.total_label)
         footer.addStretch()
@@ -225,6 +222,7 @@ class PurchasesPage(QWidget):
 
     def _rebuild_table(self):
         self.table.setRowCount(0)
+        t = theme._active
         for idx, item in enumerate(self._items):
             r = self.table.rowCount()
             self.table.insertRow(r)
@@ -233,17 +231,33 @@ class PurchasesPage(QWidget):
                 it = QTableWidgetItem(text)
                 it.setToolTip(text)
                 return it
-
-            self.table.setItem(r, 0, _item(item["product_name"]))
+                
+            name_item = _item(item["product_name"])
+            name_item.setFont(QFont(t.font_family, t.size_normal, QFont.Bold))
+            self.table.setItem(r, 0, name_item)
+            
             self.table.setItem(r, 1, _item(_fmt(item['quantity'])))
             self.table.setItem(r, 2, _item(_fmt(item['unit_price'])))
-            self.table.setItem(r, 3, _item(_fmt(item['subtotal'])))
+            
+            subtotal_item = _item(_fmt(item['subtotal']))
+            subtotal_item.setFont(QFont(t.font_family, t.size_normal, QFont.Bold))
+            self.table.setItem(r, 3, subtotal_item)
 
-            remove_btn = QPushButton("Remove")
-            remove_btn.setMinimumWidth(theme._BTN_MIN_REMOVE)
+            cell_widget = QWidget()
+            btn_layout = QHBoxLayout(cell_widget)
+            btn_layout.setContentsMargins(4, 4, 4, 4)
+            remove_btn = QPushButton("❌ Remove")
+            remove_btn.setCursor(Qt.PointingHandCursor)
+            remove_btn.setStyleSheet(
+                f"QPushButton {{ background-color: {t.surface_alt}; color: {t.error};"
+                f" border: 1px solid {t.border}; border-radius: 6px; padding: 4px 8px; font-weight: 500; }}"
+                f"QPushButton:hover {{ background-color: {t.error}; color: white; border: none; }}"
+            )
             remove_btn.clicked.connect(
                 lambda checked=False, i=idx: self._on_remove_line(i))
-            self.table.setCellWidget(r, 4, remove_btn)
+            btn_layout.addWidget(remove_btn)
+            self.table.setCellWidget(r, 4, cell_widget)
+            
         has_rows = self.table.rowCount() > 0
         self.table.setVisible(has_rows)
         self._empty_table_lbl.setVisible(not has_rows)

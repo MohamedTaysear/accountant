@@ -8,10 +8,11 @@ def _fmt(v) -> str:
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
     QCheckBox, QTableWidget, QTableWidgetItem, QHeaderView,
-    QMessageBox, QLabel, QFrame,
+    QMessageBox, QLabel, QFrame, QSizePolicy
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QColor
+import qtawesome as qta
 
 import products_db
 from ui.product_dialog import ProductDialog
@@ -25,40 +26,71 @@ class ProductsPage(QWidget):
         self._load_products()
 
     def _build_ui(self):
+        t = theme._active
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(
-            theme._active.spacing_xl, theme._active.spacing_xl,
-            theme._active.spacing_xl, theme._active.spacing_xl)
-        layout.setSpacing(theme._active.spacing_lg)
+        layout.setContentsMargins(t.spacing_xl, t.spacing_xl, t.spacing_xl, t.spacing_xl)
+        layout.setSpacing(t.spacing_lg)
 
         # ── Page header ──────────────────────────────────────────────
         header_row = QHBoxLayout()
-        page_title = QLabel("Products")
-        title_font = QFont(theme._active.font_family, theme._active.size_page_title)
+        page_title = QLabel("Products Inventory")
+        title_font = QFont(t.font_family, t.size_page_title)
         title_font.setBold(True)
         page_title.setFont(title_font)
-        page_title.setStyleSheet(
-            f"color: {theme._active.text_primary}; background: transparent;")
+        page_title.setStyleSheet(f"color: {t.text_primary}; background: transparent; font-weight: 700;")
+        
+        icon_lbl = QLabel()
+        icon_lbl.setPixmap(qta.icon('fa5s.box', color=t.primary).pixmap(24, 24))
+        icon_lbl.setStyleSheet("background: transparent; border: none;")
+        
+        header_row.addWidget(icon_lbl)
         header_row.addWidget(page_title)
+        
         header_row.addStretch()
-        self.add_btn = QPushButton("  + Add Product")
-        self.add_btn.setProperty("class", "primary")
-        self.add_btn.setMinimumWidth(130)
+        
+        self.add_btn = QPushButton("  Add Product")
+        self.add_btn.setIcon(qta.icon('fa5s.plus', color='white'))
+        self.add_btn.setStyleSheet(
+            f"QPushButton {{ background-color: {t.primary}; color: white; border: none; border-radius: 8px; padding: 8px 16px; font-weight: 600; font-size: {t.size_section}pt; }}"
+            f"QPushButton:hover {{ background-color: {t.primary_hover}; }}"
+        )
+        self.add_btn.setMinimumHeight(44)
+        self.add_btn.setMinimumWidth(160)
+        self.add_btn.setCursor(Qt.PointingHandCursor)
         header_row.addWidget(self.add_btn)
         layout.addLayout(header_row)
 
-        # ── Search / filter toolbar ──────────────────────────────────
-        toolbar = QHBoxLayout()
-        toolbar.setSpacing(theme._active.spacing_md)
+        # ── Control Bar (Search / Filter) ─────────────────────────────
+        control_frame = QFrame()
+        control_frame.setStyleSheet(
+            f"QFrame {{"
+            f" background-color: {t.surface};"
+            f" border: 1px solid {t.border};"
+            f" border-radius: {t.card_border_radius}px;"
+            f"}}"
+        )
+        control_frame.setGraphicsEffect(theme.make_card_shadow())
+        
+        toolbar = QHBoxLayout(control_frame)
+        toolbar.setContentsMargins(t.spacing_md, t.spacing_sm, t.spacing_md, t.spacing_sm)
+        toolbar.setSpacing(t.spacing_md)
         toolbar.setAlignment(Qt.AlignVCenter)
+        
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search products by name or category…")
+        self.search_input.setPlaceholderText("🔍 Search products by name or category…")
         self.search_input.setMaximumWidth(400)
+        self.search_input.setStyleSheet(
+            f"QLineEdit {{ border: 1px solid {t.border}; border-radius: 8px; padding: 6px 12px; background: {t.background}; }}"
+            f"QLineEdit:focus {{ border-color: {t.primary}; }}"
+        )
+        
         self.show_inactive_cb = QCheckBox("Show Inactive")
+        self.show_inactive_cb.setCursor(Qt.PointingHandCursor)
+        
         toolbar.addWidget(self.search_input)
         toolbar.addWidget(self.show_inactive_cb)
         toolbar.addStretch()
-        layout.addLayout(toolbar)
+        layout.addWidget(control_frame)
 
         # ── Products table ───────────────────────────────────────────
         self.table = QTableWidget()
@@ -71,12 +103,10 @@ class ProductsPage(QWidget):
         ])
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.table.setColumnHidden(0, True)
-        # Fixed widths — sized to fit uppercase header text at the theme font
-        for col, w in [(2, 100), (3, 132), (4, 122), (5, 100), (6, 112), (7, 95), (8, 128), (9, 72)]:
+        # Fixed widths 
+        for col, w in [(2, 120), (3, 140), (4, 130), (5, 120), (6, 120), (7, 100), (8, 130), (9, 100)]:
             self.table.setColumnWidth(col, w)
-        self.table.setStyleSheet(
-            f"QTableWidget {{ border-radius: {theme._active.card_border_radius}px;"
-            f" border: 1px solid {theme._active.border}; }}")
+            
         theme.apply_table_style(self.table)
         theme.apply_actions_column(self.table, 10)
 
@@ -105,6 +135,7 @@ class ProductsPage(QWidget):
             return
 
         self.table.setRowCount(0)
+        t = theme._active
         for row in rows:
             r = self.table.rowCount()
             self.table.insertRow(r)
@@ -115,18 +146,40 @@ class ProductsPage(QWidget):
                 return it
 
             self.table.setItem(r, 0, QTableWidgetItem(str(row["id"])))
-            self.table.setItem(r, 1, _item(row["name"] or ""))
+            
+            name_item = _item(row["name"] or "")
+            name_item.setFont(QFont(t.font_family, t.size_normal, QFont.Bold))
+            self.table.setItem(r, 1, name_item)
+            
             self.table.setItem(r, 2, _item(row["category"] or ""))
+            
             profit = row['selling_price'] - row['purchase_price']
             stock_profit = profit * row['stock_quantity']
             self.table.setItem(r, 3, _item(_fmt(row['purchase_price'])))
             self.table.setItem(r, 4, _item(_fmt(row['selling_price'])))
-            self.table.setItem(r, 5, _item(_fmt(profit)))
-            self.table.setItem(r, 6, _item(_fmt(stock_profit)))
-            self.table.setItem(r, 7, _item(_fmt(row['stock_quantity'])))
-            self.table.setItem(r, 8, _item(_fmt(row['reorder_level'])))
+            
+            profit_item = _item(_fmt(profit))
+            profit_item.setForeground(QColor(theme.color_for_value(profit)))
+            self.table.setItem(r, 5, profit_item)
+            
+            stock_profit_item = _item(_fmt(stock_profit))
+            stock_profit_item.setForeground(QColor(theme.color_for_value(stock_profit)))
+            self.table.setItem(r, 6, stock_profit_item)
+            
+            qty = row['stock_quantity']
+            reorder = row['reorder_level']
+            qty_item = _item(str(qty))
+            if qty <= reorder:
+                qty_item.setForeground(QColor(t.error))
+                qty_item.setFont(QFont(t.font_family, t.size_normal, QFont.Bold))
+            self.table.setItem(r, 7, qty_item)
+            
+            self.table.setItem(r, 8, _item(str(reorder)))
+            
             status = "Active" if row["is_active"] else "Inactive"
-            self.table.setItem(r, 9, _item(status))
+            status_item = _item(status)
+            status_item.setForeground(QColor(t.success if row["is_active"] else t.text_disabled))
+            self.table.setItem(r, 9, status_item)
 
             self._add_action_buttons(r, row["id"], bool(row["is_active"]))
 
@@ -137,35 +190,56 @@ class ProductsPage(QWidget):
         self._empty_search_lbl.setVisible(not has_rows and search_active)
 
     def _add_action_buttons(self, row_index: int, product_id: int, is_active: bool):
+        t = theme._active
         cell_widget = QWidget()
         btn_layout  = QHBoxLayout(cell_widget)
-        btn_layout.setContentsMargins(2, 2, 2, 2)
-        btn_layout.setSpacing(4)
+        btn_layout.setContentsMargins(8, 4, 8, 4)
+        btn_layout.setSpacing(12)
 
-        edit_btn = QPushButton("Edit")
-        edit_btn.setMinimumWidth(theme._BTN_MIN_EDIT)
+        btn_style = (
+            f"QPushButton {{ background-color: {t.surface_alt}; color: {t.text_primary};"
+            f" border: 1px solid {t.border}; border-radius: 6px; padding: 6px 12px; font-weight: 500; }}"
+            f"QPushButton:hover {{ background-color: {t.primary}; color: white; border: none; }}"
+        )
+        dest_style = (
+            f"QPushButton {{ background-color: {t.surface_alt}; color: {t.error};"
+            f" border: 1px solid {t.border}; border-radius: 6px; padding: 6px 12px; font-weight: 500; }}"
+            f"QPushButton:hover {{ background-color: {t.error}; color: white; border: none; }}"
+        )
+
+        edit_btn = QPushButton(" Edit")
+        edit_btn.setIcon(qta.icon('fa5s.edit', color=t.text_primary))
+        edit_btn.setStyleSheet(btn_style)
+        edit_btn.setCursor(Qt.PointingHandCursor)
         edit_btn.clicked.connect(lambda: self._on_edit(product_id))
         btn_layout.addWidget(edit_btn)
 
         if products_db.is_product_referenced(product_id):
             if is_active:
-                action_btn = QPushButton("Deactivate")
-                action_btn.setMinimumWidth(theme._BTN_MIN_DEACTIVATE)
-                action_btn.setProperty("class", "destructive")
-                action_btn.clicked.connect(
-                    lambda: self._on_deactivate(product_id))
+                action_btn = QPushButton(" Hide")
+                action_btn.setIcon(qta.icon('fa5s.eye-slash', color=t.error))
+                action_btn.setStyleSheet(dest_style)
+                action_btn.setCursor(Qt.PointingHandCursor)
+                action_btn.clicked.connect(lambda: self._on_deactivate(product_id))
             else:
-                action_btn = QPushButton("Activate")
-                action_btn.setMinimumWidth(theme._BTN_MIN_ACTIVATE)
-                action_btn.clicked.connect(
-                    lambda: self._on_activate(product_id))
+                action_btn = QPushButton(" Show")
+                action_btn.setIcon(qta.icon('fa5s.eye', color=t.text_primary))
+                action_btn.setStyleSheet(btn_style)
+                action_btn.setCursor(Qt.PointingHandCursor)
+                action_btn.clicked.connect(lambda: self._on_activate(product_id))
         else:
-            action_btn = QPushButton("Delete")
-            action_btn.setMinimumWidth(theme._BTN_MIN_DELETE)
-            action_btn.setProperty("class", "destructive")
+            action_btn = QPushButton(" Delete")
+            action_btn.setIcon(qta.icon('fa5s.trash-alt', color=t.error))
+            action_btn.setStyleSheet(dest_style)
+            action_btn.setCursor(Qt.PointingHandCursor)
             action_btn.clicked.connect(lambda: self._on_delete(product_id))
 
         btn_layout.addWidget(action_btn)
+        
+        # Update icon colors on hover for a premium feel
+        edit_btn.installEventFilter(self)
+        action_btn.installEventFilter(self)
+        
         self.table.setCellWidget(row_index, 10, cell_widget)
 
     def _on_add(self):

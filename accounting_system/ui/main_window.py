@@ -19,6 +19,7 @@ from ui.sales_page           import SalesPage
 from ui.purchases_page       import PurchasesPage
 from ui.reports_page         import ReportsPage
 from ui.expenses_page        import ExpensesPage
+from ui.customers_page       import CustomersPage
 
 
 class MainWindow(QMainWindow):
@@ -77,7 +78,8 @@ class MainWindow(QMainWindow):
             ("Sales",      2, "sales.svg"),
             ("Purchases",  3, "purchases.svg"),
             ("Expenses",   4, "expenses.svg"),
-            ("Reports",    5, "reports.svg"),
+            ("Customers",  5, "customers.svg"),
+            ("Reports",    6, "reports.svg"),
         ]
         self._nav_btns = []
         for label, idx, icon_file in nav_buttons:
@@ -138,14 +140,18 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.dashboard_page  = DashboardPage()
         self.products_page   = ProductsPage()
+        self.customers_page  = CustomersPage()
         self.stack.addWidget(self.dashboard_page)   # 0
         self.stack.addWidget(self.products_page)    # 1
         self.stack.addWidget(SalesPage())           # 2
         self.stack.addWidget(PurchasesPage())       # 3
         self.stack.addWidget(ExpensesPage())        # 4
-        self.stack.addWidget(ReportsPage())         # 5
+        self.stack.addWidget(self.customers_page)   # 5
+        self.stack.addWidget(ReportsPage())         # 6
 
         self.dashboard_page.navigate_to_product.connect(self._on_navigate_to_product)
+        self.customers_page.open_customer_detail.connect(self._on_open_customer_detail)
+        self.dashboard_page.navigate_to_customer.connect(self._on_open_customer_detail)
 
         # Apply initial active state
         self._current_nav_idx = 0
@@ -196,6 +202,21 @@ class MainWindow(QMainWindow):
     def _on_navigate_to_product(self, product_id: int):
         self._switch_page(1)
         self.products_page.highlight_product(product_id)
+
+    def _on_open_customer_detail(self, customer_id: int):
+        if not hasattr(self, '_customer_detail_page'):
+            from ui.customer_detail_page import CustomerDetailPage
+            self._customer_detail_page = CustomerDetailPage()
+            self.stack.addWidget(self._customer_detail_page)
+            self._customer_detail_page.back_requested.connect(
+                lambda: self._switch_page(5)
+            )
+        self._customer_detail_page.load_customer(customer_id)
+        detail_idx = self.stack.indexOf(self._customer_detail_page)
+        self._current_nav_idx = 5
+        for i, btn in enumerate(self._nav_btns):
+            btn.setStyleSheet(self._nav_btn_active_style() if i == 5 else self._nav_btn_normal_style())
+        self.stack.setCurrentIndex(detail_idx)
 
     def _on_change_password(self):
         from ui.change_password_dialog import ChangePasswordDialog
@@ -265,6 +286,8 @@ class MainWindow(QMainWindow):
                 page._load_products()
             elif hasattr(page, '_load_expenses'):
                 page._load_expenses()
+        if hasattr(self, 'customers_page'):
+            self.customers_page._refresh()
 
     def _on_logout(self):
         self.logged_out.emit()

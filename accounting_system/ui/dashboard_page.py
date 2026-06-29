@@ -10,6 +10,7 @@ from PySide6.QtGui import QColor, QFont
 
 import products_db
 from logic import report_logic
+from logic import customers_logic
 from ui import theme
 
 
@@ -76,7 +77,8 @@ def _divider() -> QFrame:
 
 
 class DashboardPage(QWidget):
-    navigate_to_product = Signal(int)
+    navigate_to_product  = Signal(int)
+    navigate_to_customer = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -186,6 +188,26 @@ class DashboardPage(QWidget):
         for title, lbl, row, col in month_cards:
             month_grid.addWidget(_make_card(title, lbl), row, col)
         layout.addLayout(month_grid)
+
+        # ── Section: Receivables ─────────────────────────────────────
+        layout.addWidget(_divider())
+        layout.addWidget(_section_header("Receivables"))
+
+        self.lbl_receivables_total    = QLabel("—")
+        self.lbl_customers_with_balance = QLabel("—")
+
+        recv_grid = QGridLayout()
+        recv_grid.setSpacing(theme._active.spacing_md)
+
+        recv_card = _make_card("Outstanding Receivables", self.lbl_receivables_total)
+        recv_card.setCursor(Qt.PointingHandCursor)
+        recv_card.mousePressEvent = lambda e: self._on_receivables_clicked()
+        recv_grid.addWidget(recv_card, 0, 0)
+        recv_grid.addWidget(_make_card("Customers With Balance", self.lbl_customers_with_balance), 0, 1)
+        for col in range(2, 7):
+            from PySide6.QtWidgets import QSpacerItem, QSizePolicy as SP
+            recv_grid.addItem(QSpacerItem(0, 0, SP.Expanding, SP.Minimum), 0, col)
+        layout.addLayout(recv_grid)
 
         # ── Section: Low Stock Products ───────────────────────────────
         layout.addWidget(_divider())
@@ -300,6 +322,14 @@ class DashboardPage(QWidget):
                 self.lbl_low_stock_count.setStyleSheet(
                     f"{kpi_base} color: {theme._active.success};")
 
+            try:
+                self.lbl_receivables_total.setText(
+                    f"{customers_logic.get_outstanding_receivables_total():,.2f}")
+                self.lbl_customers_with_balance.setText(
+                    str(customers_logic.get_customers_with_outstanding_count()))
+            except Exception:
+                pass
+
             self._refresh_low_stock()
             self._refresh_recent_activity()
         except Exception:
@@ -343,6 +373,45 @@ class DashboardPage(QWidget):
         has_rows = self.recent_table.rowCount() > 0
         self.recent_table.setVisible(has_rows)
         self._recent_empty_lbl.setVisible(not has_rows)
+
+    def _on_receivables_clicked(self):
+        from PySide6.QtWidgets import (
+            QDialog, QVBoxLayout, QTableWidget, QTableWidgetItem,
+            QHeaderView, QLabel as _QL,
+        )
+        try:
+            rows = customers_logic.get_customers_with_outstanding_list()
+        except Exception:
+            traceback.print_exc()
+            return
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Outstanding Receivables")
+        dlg.setMinimumSize(400, 300)
+        lay = QVBoxLayout(dlg)
+        if not rows:
+            lay.addWidget(_QL("No outstanding receivables."))
+        else:
+            tbl = QTableWidget(len(rows), 2)
+            tbl.setHorizontalHeaderLabels(["Customer", "Outstanding Balance"])
+            tbl.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+            tbl.setColumnWidth(1, 160)
+            tbl.setEditTriggers(QTableWidget.NoEditTriggers)
+            tbl.setSelectionBehavior(QTableWidget.SelectRows)
+            for r, row in enumerate(rows):
+                name_item = QTableWidgetItem(row["name"])
+                name_item.setData(Qt.UserRole, row["id"])
+                tbl.setItem(r, 0, name_item)
+                tbl.setItem(r, 1, QTableWidgetItem(f"{row['outstanding_balance']:,.2f}"))
+
+            def _on_double_click(idx):
+                cid = tbl.item(idx.row(), 0).data(Qt.UserRole)
+                self.navigate_to_customer.emit(cid)
+                dlg.accept()
+
+            tbl.doubleClicked.connect(_on_double_click)
+            lay.addWidget(tbl)
+            lay.addWidget(_QL("Double-click to open customer profile."))
+        dlg.exec()
 
     def _on_low_stock_clicked(self, row, col):
         item = self.low_stock_table.item(row, 0)

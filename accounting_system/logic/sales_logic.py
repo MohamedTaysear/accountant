@@ -1,5 +1,6 @@
 import sales_db
 import products_db
+from logic.customers_logic import validate_partial_payment
 
 
 def get_next_invoice_number() -> str:
@@ -41,6 +42,17 @@ def validate_stock(product_id: int, quantity: float, current_items: list) -> tup
     return True, ""
 
 
+def compute_amount_paid(invoice_total: float, payment_status: str, partial_amount: float) -> float:
+    """Returns amount_paid based on payment_status: 'paid_in_full', 'partial', or 'unpaid'."""
+    if payment_status == "paid_in_full":
+        return invoice_total
+    elif payment_status == "unpaid":
+        return 0.0
+    else:
+        validate_partial_payment(invoice_total, partial_amount)
+        return round(partial_amount, 2)
+
+
 def save_sale(customer_name, discount_amount: float, items: list) -> str:
     if not items:
         raise ValueError("Invoice must have at least one item before saving.")
@@ -51,6 +63,24 @@ def save_sale(customer_name, discount_amount: float, items: list) -> str:
         )
     customer = customer_name.strip() if customer_name else None
     return sales_db.insert_sale_with_items(customer, discount_amount, items)
+
+
+def save_sale_with_customer(customer_name, customer_id, discount_amount: float,
+                            items: list, payment_status: str, partial_amount: float = 0.0) -> str:
+    if not items:
+        raise ValueError("Invoice must have at least one item before saving.")
+    subtotal = sum(item["subtotal"] for item in items)
+    if discount_amount > subtotal:
+        raise ValueError(
+            f"Discount ({discount_amount}) cannot exceed invoice subtotal ({subtotal})."
+        )
+    invoice_total = max(0.0, subtotal - discount_amount)
+    amount_paid = compute_amount_paid(invoice_total, payment_status, partial_amount)
+    customer = customer_name.strip() if customer_name else None
+    return sales_db.insert_sale_with_items(
+        customer, discount_amount, items,
+        customer_id=customer_id, amount_paid=amount_paid
+    )
 
 
 def void_sale(sale_id: int) -> None:

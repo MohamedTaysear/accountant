@@ -112,7 +112,37 @@ def initialize_database() -> None:
                 notes       TEXT    NOT NULL DEFAULT '',
                 FOREIGN KEY (invoice_id) REFERENCES ExpenseInvoices(id)
             );
+
+            CREATE TABLE IF NOT EXISTS Customers (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                name       TEXT    NOT NULL,
+                phone      TEXT    NOT NULL DEFAULT '',
+                created_at TEXT    NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS Payments (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_id     INTEGER NOT NULL,
+                sale_id         INTEGER NOT NULL,
+                amount          REAL    NOT NULL,
+                notes           TEXT    NOT NULL DEFAULT '',
+                remaining_after REAL    NOT NULL DEFAULT 0,
+                payment_date    TEXT    NOT NULL,
+                created_at      TEXT    NOT NULL,
+                FOREIGN KEY (customer_id) REFERENCES Customers(id),
+                FOREIGN KEY (sale_id)     REFERENCES Sales(id)
+            );
         """)
+        conn.commit()
+
+        for ddl in [
+            "ALTER TABLE Sales ADD COLUMN customer_id INTEGER REFERENCES Customers(id)",
+            "ALTER TABLE Sales ADD COLUMN amount_paid REAL NOT NULL DEFAULT 0",
+        ]:
+            try:
+                conn.execute(ddl)
+            except Exception:
+                pass
         conn.commit()
     finally:
         conn.close()

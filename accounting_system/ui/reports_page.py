@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont
 
-from logic import expenses_logic, report_logic
+from logic import expenses_logic, report_logic, customers_logic
 from ui import theme
 
 PAGE_SIZE = 10
@@ -387,6 +387,33 @@ class ReportsPage(QWidget):
 
         layout.addWidget(top_splitter)
 
+        # ── Customer Receivables section ──────────────────────────────
+        recv_frame, recv_vl, recv_hdr = self._section_panel(
+            "Customer Receivables", "👤", t.primary)
+
+        recv_hdr.addStretch()
+        self._recv_search = QLineEdit()
+        self._recv_search.setPlaceholderText("Search customer name…")
+        self._recv_search.setClearButtonEnabled(True)
+        self._recv_search.setFixedWidth(200)
+        self._recv_search.textChanged.connect(self._refresh_receivables)
+        recv_hdr.addWidget(self._recv_search)
+
+        self._recv_table = QTableWidget()
+        self._recv_table.setColumnCount(4)
+        self._recv_table.setHorizontalHeaderLabels(
+            ["Customer", "Total Sales", "Total Paid", "Outstanding Balance"])
+        self._recv_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        for col in [1, 2, 3]:
+            self._recv_table.setColumnWidth(col, 150)
+        self._recv_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self._recv_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self._recv_table.setSortingEnabled(True)
+        theme.apply_table_style(self._recv_table, max_height=300)
+        recv_vl.addWidget(self._recv_table)
+
+        layout.addWidget(recv_frame)
+
         # ── Signal connections ────────────────────────────────────────
         self.filter_combo.currentIndexChanged.connect(self._on_filter_changed)
         self.apply_btn.clicked.connect(self._apply_filter)
@@ -534,6 +561,7 @@ class ReportsPage(QWidget):
             self._populate_history_tables(start, end)
             self._populate_top_products(start, end)
             self._reload_category_combo()
+            self._refresh_receivables()
         except Exception:
             print(traceback.format_exc())
             QMessageBox.critical(self, "Error", "Failed to load report data.")
@@ -687,6 +715,29 @@ class ReportsPage(QWidget):
         self._update_pagination(
             self._expenses_showing_lbl, self._expenses_prev_btn,
             self._expenses_page_btn, self._expenses_next_btn, page, len(rows))
+
+    def _refresh_receivables(self):
+        if not hasattr(self, '_recv_table'):
+            return
+        search = self._recv_search.text().strip() if hasattr(self, '_recv_search') else ""
+        try:
+            data = customers_logic.get_receivables_report(search=search or None)
+        except Exception:
+            traceback.print_exc()
+            return
+        self._recv_table.setSortingEnabled(False)
+        self._recv_table.setRowCount(len(data))
+        for row, r in enumerate(data):
+            for col, text in enumerate([
+                r["name"],
+                f"{r['total_sales']:,.2f}",
+                f"{r['total_paid']:,.2f}",
+                f"{r['outstanding_balance']:,.2f}",
+            ]):
+                item = QTableWidgetItem(text)
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                self._recv_table.setItem(row, col, item)
+        self._recv_table.setSortingEnabled(True)
 
     def _populate_top_products(self, start_date, end_date):
         self.top_sales_table.setRowCount(0)

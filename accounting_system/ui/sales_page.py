@@ -33,6 +33,7 @@ class _SpinBox(QDoubleSpinBox):
 
 import products_db
 from logic import sales_logic
+from logic.customers_logic import get_all_customers_for_selector, create_customer
 from ui import theme
 
 
@@ -84,10 +85,16 @@ class SalesPage(QWidget):
         self.date_label.setStyleSheet("background: transparent;")
         header_form.addRow("Date:", self.date_label)
 
-        self.customer_input = QLineEdit()
-        self.customer_input.setPlaceholderText("Optional customer name")
-        self.customer_input.setMaximumWidth(280)
-        header_form.addRow("Customer:", self.customer_input)
+        self.customer_combo = QComboBox()
+        self.customer_combo.setEditable(True)
+        self.customer_combo.setMaximumWidth(320)
+        self.customer_combo.setInsertPolicy(QComboBox.NoInsert)
+        self._selected_customer_id = None
+        self._customer_data = []
+        self._refresh_customer_combo()
+        self.customer_combo.currentIndexChanged.connect(self._on_customer_selected)
+        self._customer_label = QLabel("Customer (Optional):")
+        header_form.addRow(self._customer_label, self.customer_combo)
 
         header_card_layout.addLayout(header_form)
         header_card_layout.addStretch()
@@ -152,17 +159,21 @@ class SalesPage(QWidget):
         layout.addWidget(self._empty_table_lbl)
         self._empty_table_lbl.hide()
 
-        # ── Footer / totals ──────────────────────────────────────────
+        # ── Footer card (totals + payment + actions) ─────────────────
         footer_card = QFrame()
         footer_card.setStyleSheet(
             f"QFrame {{ background-color: {theme._active.surface};"
             f" border: 1px solid {theme._active.border};"
             f" border-radius: {theme._active.card_border_radius}px; }}")
-        footer = QHBoxLayout(footer_card)
-        footer.setContentsMargins(
+        footer_vbox = QVBoxLayout(footer_card)
+        footer_vbox.setContentsMargins(
             theme._active.spacing_lg, theme._active.spacing_md,
             theme._active.spacing_lg, theme._active.spacing_md)
-        footer.setSpacing(theme._active.spacing_md)
+        footer_vbox.setSpacing(theme._active.spacing_sm)
+
+        # -- Totals row --
+        totals_row = QHBoxLayout()
+        totals_row.setSpacing(theme._active.spacing_md)
 
         self.subtotal_label = QLabel("Subtotal: 0.00")
         subtotal_font = QFont(theme._active.font_family, theme._active.size_normal)
@@ -188,25 +199,106 @@ class SalesPage(QWidget):
         self.grand_total_label.setStyleSheet(
             f"color: {theme._active.primary}; background: transparent;")
 
+        disc_lbl = QLabel("Discount:")
+        disc_lbl.setStyleSheet(
+            f"color: {theme._active.text_secondary}; background: transparent;")
+
+        totals_row.addWidget(self.subtotal_label)
+        totals_row.addStretch()
+        totals_row.addWidget(disc_lbl)
+        totals_row.addWidget(self.discount_spin)
+        totals_row.addWidget(self.discount_type_combo)
+        totals_row.addSpacing(theme._active.spacing_lg)
+        totals_row.addWidget(self.grand_total_label)
+        footer_vbox.addLayout(totals_row)
+
+        # -- Payment section (revealed once items exist and total > 0) --
+        self._payment_section = QWidget()
+        self._payment_section.setStyleSheet("background: transparent;")
+        payment_vbox = QVBoxLayout(self._payment_section)
+        payment_vbox.setContentsMargins(0, theme._active.spacing_sm, 0, 0)
+        payment_vbox.setSpacing(theme._active.spacing_sm)
+
+        sep1 = QFrame()
+        sep1.setFrameShape(QFrame.HLine)
+        sep1.setStyleSheet(f"color: {theme._active.border};")
+        payment_vbox.addWidget(sep1)
+
+        # Payment Status
+        status_row = QHBoxLayout()
+        status_row.setSpacing(theme._active.spacing_md)
+        status_lbl = QLabel("Payment Status:")
+        status_lbl.setStyleSheet(
+            f"color: {theme._active.text_secondary}; background: transparent;")
+        self.payment_status_combo = QComboBox()
+        self.payment_status_combo.addItem("Paid in Full",    "paid_in_full")
+        self.payment_status_combo.addItem("Partial Payment", "partial")
+        self.payment_status_combo.addItem("Unpaid / Credit", "unpaid")
+        self.payment_status_combo.currentIndexChanged.connect(self._on_payment_status_changed)
+        status_row.addWidget(status_lbl)
+        status_row.addWidget(self.payment_status_combo)
+        status_row.addStretch()
+        payment_vbox.addLayout(status_row)
+
+        # Amount Paid (partial only)
+        self._amount_paid_row = QWidget()
+        self._amount_paid_row.setStyleSheet("background: transparent;")
+        amt_row_layout = QHBoxLayout(self._amount_paid_row)
+        amt_row_layout.setContentsMargins(0, 0, 0, 0)
+        amt_row_layout.setSpacing(theme._active.spacing_md)
+        amt_lbl = QLabel("Amount Paid:")
+        amt_lbl.setStyleSheet(
+            f"color: {theme._active.text_secondary}; background: transparent;")
+        self.amount_paid_spin = QDoubleSpinBox()
+        self.amount_paid_spin.setDecimals(2)
+        self.amount_paid_spin.setRange(0, 0)
+        self.amount_paid_spin.setFixedWidth(140)
+        self.amount_paid_spin.valueChanged.connect(self._on_amount_paid_changed)
+        amt_row_layout.addWidget(amt_lbl)
+        amt_row_layout.addWidget(self.amount_paid_spin)
+        amt_row_layout.addStretch()
+        payment_vbox.addWidget(self._amount_paid_row)
+        self._amount_paid_row.hide()
+
+        # Remaining Balance
+        self._remaining_row = QWidget()
+        self._remaining_row.setStyleSheet("background: transparent;")
+        rem_row_layout = QHBoxLayout(self._remaining_row)
+        rem_row_layout.setContentsMargins(0, 0, 0, 0)
+        rem_row_layout.setSpacing(theme._active.spacing_md)
+        rem_lbl = QLabel("Remaining Balance:")
+        rem_lbl.setStyleSheet(
+            f"color: {theme._active.text_secondary}; background: transparent;")
+        self.remaining_lbl = QLabel("0.00")
+        self.remaining_lbl.setStyleSheet(
+            f"font-weight: bold; color: {theme._active.text_primary}; background: transparent;")
+        rem_row_layout.addWidget(rem_lbl)
+        rem_row_layout.addWidget(self.remaining_lbl)
+        rem_row_layout.addStretch()
+        payment_vbox.addWidget(self._remaining_row)
+        self._remaining_row.hide()
+
+        footer_vbox.addWidget(self._payment_section)
+        self._payment_section.hide()
+
+        # -- Action buttons --
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.HLine)
+        sep2.setStyleSheet(f"color: {theme._active.border};")
+        footer_vbox.addWidget(sep2)
+
         self.clear_btn = QPushButton("Clear Invoice")
         self.clear_btn.setProperty("class", "destructive")
         self.save_btn = QPushButton("Save Invoice")
         self.save_btn.setProperty("class", "primary")
 
-        disc_lbl = QLabel("Discount:")
-        disc_lbl.setStyleSheet(
-            f"color: {theme._active.text_secondary}; background: transparent;")
+        buttons_row = QHBoxLayout()
+        buttons_row.setSpacing(theme._active.spacing_md)
+        buttons_row.addStretch()
+        buttons_row.addWidget(self.clear_btn)
+        buttons_row.addWidget(self.save_btn)
+        footer_vbox.addLayout(buttons_row)
 
-        footer.addWidget(self.subtotal_label)
-        footer.addStretch()
-        footer.addWidget(disc_lbl)
-        footer.addWidget(self.discount_spin)
-        footer.addWidget(self.discount_type_combo)
-        footer.addSpacing(theme._active.spacing_lg)
-        footer.addWidget(self.grand_total_label)
-        footer.addSpacing(theme._active.spacing_xl)
-        footer.addWidget(self.clear_btn)
-        footer.addWidget(self.save_btn)
         footer_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         layout.addWidget(footer_card)
         layout.addStretch()
@@ -256,6 +348,13 @@ class SalesPage(QWidget):
             return round(subtotal * value / 100, 2)
         return value
 
+    def _compute_invoice_total(self) -> float:
+        subtotal  = sum(item["subtotal"] for item in self._items)
+        disc_type = self.discount_type_combo.currentText()
+        disc_val  = self.discount_spin.value()
+        discount  = round(subtotal * disc_val / 100, 2) if disc_type == "%" else disc_val
+        return max(0.0, round(subtotal - discount, 2))
+
     def _update_totals(self):
         subtotal = self._get_subtotal()
         discount = self._discount_amount()
@@ -267,6 +366,29 @@ class SalesPage(QWidget):
                 "QDoubleSpinBox { border: 2px solid red; }")
         else:
             self.discount_spin.setStyleSheet("")
+
+        has_payable = len(self._items) > 0 and grand_total > 0
+        self._payment_section.setVisible(has_payable)
+        if has_payable:
+            self._refresh_payment_section()
+
+    def _refresh_payment_section(self):
+        status = self.payment_status_combo.currentData()
+        grand_total = self._compute_invoice_total()
+
+        if status == "paid_in_full":
+            self._amount_paid_row.hide()
+            self._remaining_row.hide()
+        elif status == "partial":
+            self.amount_paid_spin.setRange(0, grand_total)
+            self._amount_paid_row.show()
+            remaining = max(0.0, round(grand_total - self.amount_paid_spin.value(), 2))
+            self.remaining_lbl.setText(f"{remaining:,.2f}")
+            self._remaining_row.show()
+        else:  # unpaid / credit
+            self._amount_paid_row.hide()
+            self.remaining_lbl.setText(f"{grand_total:,.2f}")
+            self._remaining_row.show()
 
     def _rebuild_table(self):
         self.table.setRowCount(0)
@@ -294,7 +416,14 @@ class SalesPage(QWidget):
 
     def _reset_form(self):
         self._items = []
-        self.customer_input.clear()
+        self._refresh_customer_combo()
+        self.payment_status_combo.blockSignals(True)
+        self.payment_status_combo.setCurrentIndex(0)
+        self.payment_status_combo.blockSignals(False)
+        self._customer_label.setText("Customer (Optional):")
+        self._amount_paid_row.hide()
+        self._remaining_row.hide()
+        self._payment_section.hide()
         self.discount_type_combo.setCurrentIndex(0)
         self.discount_spin.setRange(0, 9_999_999)
         self.discount_spin.setValue(0.0)
@@ -302,6 +431,98 @@ class SalesPage(QWidget):
         self._rebuild_table()
         self._update_totals()
         self._refresh_invoice_number()
+
+    def _refresh_customer_combo(self):
+        self.customer_combo.blockSignals(True)
+        self.customer_combo.clear()
+        self._customer_data = get_all_customers_for_selector()
+        self.customer_combo.addItem("(Select or add customer)", None)
+        for c in self._customer_data:
+            label = c["name"] + (f"  [{c['phone']}]" if c["phone"] else "")
+            self.customer_combo.addItem(label, c["id"])
+        self.customer_combo.addItem("＋ Add New Customer…", "ADD_NEW")
+        self.customer_combo.blockSignals(False)
+        self._selected_customer_id = None
+
+    def _on_customer_selected(self, index):
+        data = self.customer_combo.itemData(index)
+        if data == "ADD_NEW":
+            self._add_new_customer()
+        else:
+            self._selected_customer_id = data
+
+    def _add_new_customer(self):
+        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout as _QFL2
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Add New Customer")
+        lay = _QFL2(dlg)
+        name_edit  = QLineEdit()
+        phone_edit = QLineEdit()
+        phone_edit.setPlaceholderText("Optional")
+        lay.addRow("Name:", name_edit)
+        lay.addRow("Phone:", phone_edit)
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        lay.addRow(btns)
+        if dlg.exec() != QDialog.Accepted:
+            self.customer_combo.setCurrentIndex(0)
+            self._selected_customer_id = None
+            return
+        try:
+            new_id = create_customer(name_edit.text(), phone_edit.text())
+            self._refresh_customer_combo()
+            for i in range(self.customer_combo.count()):
+                if self.customer_combo.itemData(i) == new_id:
+                    self.customer_combo.setCurrentIndex(i)
+                    break
+        except ValueError as e:
+            QMessageBox.warning(self, "Validation Error", str(e))
+            self.customer_combo.setCurrentIndex(0)
+            self._selected_customer_id = None
+
+    def _resolve_customer(self) -> tuple:
+        """Returns (customer_id, customer_name) from current combo state.
+
+        Priority: directly-selected item → text match against known customers
+        → unrecognised typed name (caller decides what to do with it).
+        """
+        idx = self.customer_combo.currentIndex()
+        if idx > 0:
+            data = self.customer_combo.itemData(idx)
+            if isinstance(data, int):
+                for c in self._customer_data:
+                    if c["id"] == data:
+                        self._selected_customer_id = data
+                        return data, c["name"]
+
+        typed = self.customer_combo.currentText().strip()
+        if not typed or typed in ("(Select or add customer)", "＋ Add New Customer…"):
+            return None, ""
+
+        for c in self._customer_data:
+            label = c["name"] + (f"  [{c['phone']}]" if c["phone"] else "")
+            if typed.lower() in (c["name"].lower(), label.lower()):
+                self._selected_customer_id = c["id"]
+                return c["id"], c["name"]
+
+        return None, typed  # unrecognised name typed by user
+
+    def _on_payment_status_changed(self, _index):
+        self._refresh_payment_section()
+        self._update_customer_label()
+
+    def _update_customer_label(self):
+        status = self.payment_status_combo.currentData()
+        if status == "paid_in_full":
+            self._customer_label.setText("Customer (Optional):")
+        else:
+            self._customer_label.setText("Customer (Required):")
+
+    def _on_amount_paid_changed(self, value):
+        total = self._compute_invoice_total()
+        remaining = max(0.0, round(total - value, 2))
+        self.remaining_lbl.setText(f"{remaining:,.2f}")
 
     # ── Signal Handlers ────────────────────────────────────────────
 
@@ -392,11 +613,38 @@ class SalesPage(QWidget):
                 f"invoice subtotal ({_fmt(subtotal)}).")
             return
 
-        customer = self.customer_input.text().strip() or None
+        payment_status = self.payment_status_combo.currentData()
+        customer_id, customer_name = self._resolve_customer()
+
+        if payment_status in ("partial", "unpaid"):
+            if customer_id is None and customer_name:
+                answer = QMessageBox.question(
+                    self, "New Customer",
+                    f'"{customer_name}" is not in your customer list.\n'
+                    "Create this customer and save the invoice?",
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+                )
+                if answer != QMessageBox.Yes:
+                    return
+                try:
+                    customer_id = create_customer(customer_name, "")
+                    self._refresh_customer_combo()
+                except ValueError as e:
+                    QMessageBox.warning(self, "Validation Error", str(e))
+                    return
+            elif customer_id is None:
+                QMessageBox.warning(self, "Missing Customer",
+                    "Customer is required when the invoice has an outstanding balance.")
+                return
+
+        partial_amount = self.amount_paid_spin.value() if payment_status == "partial" else 0.0
 
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
-            invoice_number = sales_logic.save_sale(customer, discount, self._items)
+            invoice_number = sales_logic.save_sale_with_customer(
+                customer_name, customer_id,
+                discount, self._items, payment_status, partial_amount
+            )
             QApplication.restoreOverrideCursor()
             QMessageBox.information(
                 self, "Saved",
@@ -415,3 +663,4 @@ class SalesPage(QWidget):
     def showEvent(self, event):
         super().showEvent(event)
         self._reload_products()  # refresh active products — do NOT call _reset_form()
+        self._refresh_customer_combo()

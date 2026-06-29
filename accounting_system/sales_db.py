@@ -11,15 +11,19 @@ def get_next_invoice_number() -> str:
         conn.close()
 
 
-def insert_sale_with_items(customer_name, discount_amount: float, items: list) -> str:
+def insert_sale_with_items(customer_name, discount_amount: float, items: list,
+                           customer_id=None, amount_paid=None) -> str:
     subtotal = sum(item["subtotal"] for item in items)
     total_amount = subtotal - discount_amount
+    ap = amount_paid if amount_paid is not None else total_amount
     conn = database.get_connection()
     try:
         conn.execute(
-            "INSERT INTO Sales (invoice_number, customer_name, discount_amount, total_amount, status, created_at)"
-            " VALUES (?, ?, ?, ?, 'active', ?)",
-            ("PENDING", customer_name, discount_amount, total_amount, database.now_cairo())
+            "INSERT INTO Sales (invoice_number, customer_name, discount_amount, total_amount,"
+            " status, created_at, customer_id, amount_paid)"
+            " VALUES (?, ?, ?, ?, 'active', ?, ?, ?)",
+            ("PENDING", customer_name, discount_amount, total_amount,
+             database.now_cairo(), customer_id, ap)
         )
         sale_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         invoice_number = f"SAL-{sale_id:06d}"

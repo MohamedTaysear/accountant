@@ -190,16 +190,16 @@ class CustomerDetailPage(QWidget):
     def _on_receive_payment(self):
         if self._customer_id is None:
             return
-        try:
-            profile = customers_logic.get_customer_profile(self._customer_id)
-        except Exception:
-            traceback.print_exc()
-            return
         from ui.receive_payment_dialog import ReceivePaymentDialog
+        try:
+            outstanding = float(self.balance_lbl.text().replace(",", ""))
+        except ValueError:
+            outstanding = 0.0
         dlg = ReceivePaymentDialog(
             self._customer_id,
-            profile["customer"]["name"],
-            parent=self
+            self.name_lbl.text(),
+            outstanding,
+            parent=self,
         )
         if dlg.exec():
             self._refresh()

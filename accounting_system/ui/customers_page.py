@@ -48,14 +48,15 @@ class CustomersPage(QWidget):
         layout.addLayout(controls)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(5)
+        self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(
-            ["Customer Name", "Phone", "Invoices", "Total Purchases", "Outstanding Balance"])
+            ["Customer Name", "Phone", "Invoices", "Total Purchases", "Outstanding Balance", ""])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         for col in [1, 2]:
             self.table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
         for col in [3, 4]:
             self.table.setColumnWidth(col, 150)
+        self.table.setColumnWidth(5, 150)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSortingEnabled(True)
@@ -64,7 +65,14 @@ class CustomersPage(QWidget):
             f" border: 1px solid {theme._active.border}; }}")
         theme.apply_table_style(self.table)
         self.table.doubleClicked.connect(self._on_row_double_clicked)
+        # Rebuild action buttons after each sort so they stay aligned with their rows
+        self.table.horizontalHeader().sortIndicatorChanged.connect(
+            lambda *_: self._repopulate_action_buttons())
         layout.addWidget(self.table)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._refresh()
 
     def _refresh(self):
         try:
@@ -106,10 +114,38 @@ class CustomersPage(QWidget):
                 self.table.setItem(row, col, item)
             self.table.item(row, 0).setData(Qt.UserRole, r["id"])
         self.table.setSortingEnabled(True)
+        self._repopulate_action_buttons()
 
-    def showEvent(self, event):
-        super().showEvent(event)
-        self._refresh()
+    def _repopulate_action_buttons(self):
+        """Rebuild Receive Payment buttons after data load or sort."""
+        for row in range(self.table.rowCount()):
+            name_item = self.table.item(row, 0)
+            bal_item  = self.table.item(row, 4)
+            if name_item is None or bal_item is None:
+                self.table.removeCellWidget(row, 5)
+                continue
+            customer_id = name_item.data(Qt.UserRole)
+            try:
+                outstanding = float(bal_item.text().replace(",", ""))
+            except ValueError:
+                outstanding = 0.0
+            if outstanding > 0:
+                btn = QPushButton("Receive Payment")
+                btn.setProperty("class", "primary")
+                btn.clicked.connect(
+                    lambda checked=False, cid=customer_id,
+                    cn=name_item.text(), ot=outstanding:
+                        self._open_receive_payment(cid, cn, ot)
+                )
+                self.table.setCellWidget(row, 5, btn)
+            else:
+                self.table.removeCellWidget(row, 5)
+
+    def _open_receive_payment(self, customer_id: int, customer_name: str, outstanding: float):
+        from ui.receive_payment_dialog import ReceivePaymentDialog
+        dlg = ReceivePaymentDialog(customer_id, customer_name, outstanding, parent=self)
+        if dlg.exec():
+            self._refresh()
 
     def _on_row_double_clicked(self, index):
         customer_id = self.table.item(index.row(), 0).data(Qt.UserRole)

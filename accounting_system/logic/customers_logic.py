@@ -66,6 +66,44 @@ def record_payment(customer_id: int, sale_id: int, amount: float, notes: str = "
         conn.close()
 
 
+def receive_payment_fifo(customer_id: int, total_amount: float, notes: str = "") -> list:
+    """Allocate total_amount across outstanding invoices in FIFO order (oldest first).
+
+    Returns a list of (invoice_number, allocated_amount) for every invoice touched.
+    All insertions happen in a single transaction — nothing is committed on error.
+    """
+    invoices = get_outstanding_invoices_for_customer(customer_id)
+    if not invoices:
+        raise ValueError("No outstanding invoices for this customer.")
+    total_outstanding = round(sum(inv["remaining"] for inv in invoices), 2)
+    if total_amount <= 0:
+        raise ValueError("Payment amount must be greater than zero.")
+    if total_amount > total_outstanding + 0.001:
+        raise ValueError("Payment cannot exceed the customer's outstanding balance.")
+
+    conn = database.get_connection()
+    try:
+        remaining_to_allocate = round(total_amount, 2)
+        allocations = []
+        for inv in invoices:
+            if remaining_to_allocate <= 0:
+                break
+            allocated = round(min(remaining_to_allocate, inv["remaining"]), 2)
+            remaining_after_inv = round(inv["remaining"] - allocated, 2)
+            payments_db.insert_payment(
+                customer_id, inv["id"], allocated, remaining_after_inv, notes, conn
+            )
+            allocations.append((inv["invoice_number"], allocated))
+            remaining_to_allocate = round(remaining_to_allocate - allocated, 2)
+        conn.commit()
+        return allocations
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 # ── Customer profile ──────────────────────────────────────────────────────
 
 def _derive_payment_status(total_amount: float, total_paid: float, inv_status: str) -> str:

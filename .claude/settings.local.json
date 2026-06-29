@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(& \"C:\\\\accountant\\\\.specify\\\\scripts\\\\powershell\\\\check-prerequisites.ps1\" -Json -PathsOnly 2>&1)",
+      "PowerShell(New-Item *)",
+      "PowerShell(& \"C:\\\\accountant\\\\.specify\\\\scripts\\\\powershell\\\\setup-plan.ps1\" -Json 2>&1)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(python -c ' *)",
+      "Skill(run)",
+      "Bash(python main.py)",
+      "Bash(echo \"App launched \\(PID $!\\)\")",
+      "PowerShell(cd C:\\\\accountant; pwsh .specify/scripts/powershell/check-prerequisites.ps1 -Json -PathsOnly 2>&1)",
+      "PowerShell(cd C:\\\\accountant; pwsh .specify/scripts/powershell/setup-plan.ps1 -Json 2>&1)",
+      "PowerShell(cd C:\\\\accountant; pwsh .specify/scripts/powershell/setup-tasks.ps1 -Json 2>&1)"
+    ]
+  }
+}

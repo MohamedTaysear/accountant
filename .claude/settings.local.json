@@ -15,7 +15,13 @@
       "PowerShell(cd C:\\\\accountant; pwsh .specify/scripts/powershell/check-prerequisites.ps1 -Json -RequireTasks -IncludeTasks 2>&1)",
       "Bash(python -c \"from ui import theme, invoice_detail_dialog; print\\('OK'\\)\")",
       "Bash(powershell -Command \"Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::PrimaryScreen | Out-Null; Add-Type -TypeDefinition 'using System; using System.Drawing; using System.Windows.Forms; public class SS { public static void Take\\(string p\\) { var b = new Bitmap\\(Screen.PrimaryScreen.Bounds.Width, Screen.PrimaryScreen.Bounds.Height\\); var g = Graphics.FromImage\\(b\\); g.CopyFromScreen\\(0,0,0,0,b.Size\\); b.Save\\(p\\); } }' -ReferencedAssemblies System.Drawing,System.Windows.Forms; SS.Take\\('C:/accountant/screenshot_reports.png'\\)\")",
-      "PowerShell(Get-Process *)"
+      "PowerShell(Get-Process *)",
+      "Bash(python3 *)",
+      "PowerShell(Get-Content \"C:\\\\accountant\\\\specs\\\\008-customer-credit-receivables\\\\checklists\\\\requirements.md\" | Select-String \"- \\\\[\" | ForEach-Object { $_.Line })",
+      "PowerShell(Set-Content *)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('ui/sales_page.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ]
   }
 }

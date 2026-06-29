@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QPushButton, QDateEdit, QTableWidget, QTableWidgetItem,
     QHeaderView, QMessageBox, QFileDialog, QApplication, QSplitter,
-    QGroupBox, QLineEdit, QFrame, QScrollArea,
+    QLineEdit, QFrame, QScrollArea,
 )
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont
@@ -14,16 +14,24 @@ from PySide6.QtGui import QFont
 from logic import expenses_logic, report_logic
 from ui import theme
 
+PAGE_SIZE = 10
+
 
 class ReportsPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._last_active_table = "sales"
+        self._sales_rows = []
+        self._purchases_rows = []
+        self._expenses_rows = []
+        self._sales_page = 0
+        self._purchases_page = 0
+        self._expenses_page = 0
         self._build_ui()
 
     @staticmethod
-    def _section_panel(title: str) -> tuple:
-        """Return (frame, layout) for a section panel used inside splitters."""
+    def _section_panel(title: str, icon: str = "", icon_color: str = "") -> tuple:
+        """Return (frame, layout, header_hbox) for a section panel."""
         t = theme._active
         frame = QFrame()
         frame.setStyleSheet(
@@ -31,15 +39,27 @@ class ReportsPage(QWidget):
             f" border: 1px solid {t.border};"
             f" border-radius: {t.card_border_radius}px; }}")
         vl = QVBoxLayout(frame)
-        vl.setContentsMargins(t.spacing_md, t.spacing_sm, t.spacing_md, t.spacing_sm)
+        vl.setContentsMargins(t.spacing_sm, t.spacing_sm, t.spacing_sm, t.spacing_sm)
         vl.setSpacing(t.spacing_xs)
 
-        hdr = QLabel(title)
-        hdr.setStyleSheet(
+        hdr_hbox = QHBoxLayout()
+        hdr_hbox.setSpacing(t.spacing_xs)
+
+        if icon:
+            icon_lbl = QLabel(icon)
+            icon_lbl.setStyleSheet(
+                f"font-size: 14pt; color: {icon_color or t.primary};"
+                f" background: transparent; border: none;")
+            hdr_hbox.addWidget(icon_lbl)
+
+        title_lbl = QLabel(title)
+        title_lbl.setStyleSheet(
             f"font-size: {t.size_heading}pt; font-weight: bold;"
             f" color: {t.text_primary}; background: transparent;"
-            f" padding: 2px 0px 4px 0px;")
-        vl.addWidget(hdr)
+            f" border: none; padding: 0px;")
+        hdr_hbox.addWidget(title_lbl)
+
+        vl.addLayout(hdr_hbox)
 
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
@@ -47,9 +67,51 @@ class ReportsPage(QWidget):
         sep.setStyleSheet(f"background-color: {t.border}; border: none; max-height: 1px;")
         vl.addWidget(sep)
 
-        return frame, vl
+        return frame, vl, hdr_hbox
+
+    def _add_pagination_footer(self, parent_vl, prefix: str):
+        """Add Showing label + [<] [page] [>] buttons to parent_vl. Returns widget refs."""
+        t = theme._active
+        foot = QHBoxLayout()
+        foot.setSpacing(t.spacing_xs)
+
+        showing_lbl = QLabel("Showing 0 of 0")
+        showing_lbl.setStyleSheet(
+            f"color: {t.text_secondary}; background: transparent; border: none;"
+            f" font-size: {t.size_small}pt;")
+        foot.addWidget(showing_lbl)
+        foot.addStretch()
+
+        prev_btn = QPushButton("‹")
+        prev_btn.setFixedSize(28, 28)
+        prev_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: 1px solid {t.border};"
+            f" border-radius: 4px; color: {t.text_secondary}; font-size: 12pt; }}"
+            f"QPushButton:hover {{ background: {t.surface_alt}; }}"
+            f"QPushButton:disabled {{ color: {t.text_disabled}; }}")
+
+        page_btn = QPushButton("1")
+        page_btn.setFixedSize(28, 28)
+        page_btn.setStyleSheet(
+            f"QPushButton {{ background: {t.primary}; border: none;"
+            f" border-radius: 4px; color: #fff; font-weight: bold; }}")
+
+        next_btn = QPushButton("›")
+        next_btn.setFixedSize(28, 28)
+        next_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: 1px solid {t.border};"
+            f" border-radius: 4px; color: {t.text_secondary}; font-size: 12pt; }}"
+            f"QPushButton:hover {{ background: {t.surface_alt}; }}"
+            f"QPushButton:disabled {{ color: {t.text_disabled}; }}")
+
+        foot.addWidget(prev_btn)
+        foot.addWidget(page_btn)
+        foot.addWidget(next_btn)
+        parent_vl.addLayout(foot)
+        return showing_lbl, prev_btn, page_btn, next_btn
 
     def _build_ui(self):
+        t = theme._active
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
 
@@ -59,12 +121,10 @@ class ReportsPage(QWidget):
         scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
 
         content = QWidget()
-        content.setStyleSheet(f"background-color: {theme._active.background};")
+        content.setStyleSheet(f"background-color: {t.background};")
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(
-            theme._active.spacing_xl, theme._active.spacing_xl,
-            theme._active.spacing_xl, theme._active.spacing_xl)
-        layout.setSpacing(theme._active.spacing_lg)
+        layout.setContentsMargins(t.spacing_xl, t.spacing_xl, t.spacing_xl, t.spacing_xl)
+        layout.setSpacing(t.spacing_lg)
 
         scroll.setWidget(content)
         outer.addWidget(scroll)
@@ -72,14 +132,13 @@ class ReportsPage(QWidget):
         # ── Page header ──────────────────────────────────────────────
         top_row = QHBoxLayout()
         page_title = QLabel("Reports")
-        title_font = QFont(theme._active.font_family, theme._active.size_page_title)
+        title_font = QFont(t.font_family, t.size_page_title)
         title_font.setBold(True)
         page_title.setFont(title_font)
-        page_title.setStyleSheet(
-            f"color: {theme._active.text_primary}; background: transparent;")
+        page_title.setStyleSheet(f"color: {t.text_primary}; background: transparent;")
         top_row.addWidget(page_title)
         top_row.addStretch()
-        self.export_btn = QPushButton("Export to CSV")
+        self.export_btn = QPushButton("⬇  Export to CSV")
         self.export_btn.setProperty("class", "primary")
         top_row.addWidget(self.export_btn)
         layout.addLayout(top_row)
@@ -87,32 +146,31 @@ class ReportsPage(QWidget):
         # ── Filter + Summary card ────────────────────────────────────
         filter_card = QFrame()
         filter_card.setStyleSheet(
-            f"QFrame {{ background-color: {theme._active.surface};"
-            f" border: 1px solid {theme._active.border};"
-            f" border-radius: {theme._active.card_border_radius}px; }}")
+            f"QFrame {{ background-color: {t.surface};"
+            f" border: 1px solid {t.border};"
+            f" border-radius: {t.card_border_radius}px; }}")
         filter_card_layout = QVBoxLayout(filter_card)
         filter_card_layout.setContentsMargins(
-            theme._active.spacing_xl, theme._active.spacing_lg,
-            theme._active.spacing_xl, theme._active.spacing_lg)
-        filter_card_layout.setSpacing(theme._active.spacing_lg)
+            t.spacing_xl, t.spacing_lg, t.spacing_xl, t.spacing_lg)
+        filter_card_layout.setSpacing(t.spacing_lg)
 
         # Filter controls row
         filter_bar = QHBoxLayout()
-        filter_bar.setSpacing(theme._active.spacing_md)
+        filter_bar.setSpacing(t.spacing_md)
+        filter_bar.setAlignment(Qt.AlignVCenter)
 
-        def _lbl(t):
-            l = QLabel(t)
-            l.setStyleSheet(
-                f"color: {theme._active.text_secondary}; background: transparent;")
+        def _lbl(text):
+            l = QLabel(text)
+            l.setStyleSheet(f"color: {t.text_secondary}; background: transparent;")
             return l
 
         filter_bar.addWidget(_lbl("Period:"))
         self.filter_combo = QComboBox()
-        self.filter_combo.addItems(["Today", "Yesterday", "This Week", "This Month", "Custom Range"])
+        self.filter_combo.addItems(["Today", "Yesterday", "This Week", "This Month", "Custom"])
         self.filter_combo.setFixedWidth(140)
         filter_bar.addWidget(self.filter_combo)
 
-        filter_bar.addSpacing(theme._active.spacing_md)
+        filter_bar.addSpacing(t.spacing_md)
         filter_bar.addWidget(_lbl("From:"))
         self.from_date = QDateEdit()
         self.from_date.setCalendarPopup(True)
@@ -140,8 +198,7 @@ class ReportsPage(QWidget):
         # Divider
         div = QFrame()
         div.setFrameShape(QFrame.HLine)
-        div.setStyleSheet(
-            f"background-color: {theme._active.border}; border: none;")
+        div.setStyleSheet(f"background-color: {t.border}; border: none;")
         div.setFixedHeight(1)
         filter_card_layout.addWidget(div)
 
@@ -155,32 +212,29 @@ class ReportsPage(QWidget):
         self.total_profit_label    = QLabel("0.00")
         self.net_profit_label      = QLabel("0.00")
 
-        kpi_font = QFont(theme._active.font_family, theme._active.size_heading)
+        kpi_font = QFont(t.font_family, t.size_heading)
         kpi_font.setBold(True)
 
-        for i, (title, lbl, color) in enumerate([
-            ("Total Sales",     self.total_sales_label,     theme._active.text_primary),
-            ("Total Purchases", self.total_purchases_label, theme._active.text_primary),
-            ("Total Expenses",  self.total_expenses_label,  theme._active.text_primary),
-            ("Gross Profit",    self.total_profit_label,    theme._active.text_primary),
-            ("Net Profit",      self.net_profit_label,      theme._active.text_primary),
+        for i, (kpi_title, lbl, color) in enumerate([
+            ("Total Sales",     self.total_sales_label,     t.text_primary),
+            ("Total Purchases", self.total_purchases_label, t.text_primary),
+            ("Total Expenses",  self.total_expenses_label,  t.text_primary),
+            ("Gross Profit",    self.total_profit_label,    t.text_primary),
+            ("Net Profit",      self.net_profit_label,      t.text_primary),
         ]):
             metric_widget = QFrame()
-            metric_widget.setStyleSheet("QFrame { background: transparent; border: none; }")
-            if i > 0:
-                metric_widget.setStyleSheet(
-                    f"QFrame {{ background: transparent; border: none;"
-                    f" border-left: 1px solid {theme._active.border}; }}")
+            border_style = (
+                f"border-left: 1px solid {t.border};" if i > 0 else ""
+            )
+            metric_widget.setStyleSheet(
+                f"QFrame {{ background: transparent; border: none; {border_style} }}")
             m_layout = QVBoxLayout(metric_widget)
-            m_layout.setContentsMargins(
-                theme._active.spacing_xl, theme._active.spacing_sm,
-                theme._active.spacing_xl, theme._active.spacing_sm)
+            m_layout.setContentsMargins(t.spacing_xl, t.spacing_sm, t.spacing_xl, t.spacing_sm)
             m_layout.setSpacing(2)
 
-            title_lbl = QLabel(title)
+            title_lbl = QLabel(kpi_title)
             title_lbl.setStyleSheet(
-                f"font-size: {theme._active.size_small}pt;"
-                f" color: {theme._active.text_secondary};"
+                f"font-size: {t.size_small}pt; color: {t.text_secondary};"
                 f" background: transparent; border: none;")
 
             lbl.setFont(kpi_font)
@@ -195,11 +249,14 @@ class ReportsPage(QWidget):
         filter_card_layout.addLayout(summary_bar)
         layout.addWidget(filter_card)
 
-        # ── History tables ────────────────────────────────────────────
-        history_splitter = QSplitter(Qt.Horizontal)
+        # ── History tables: Sales | Purchases (side by side) ──────────
+        top_history_splitter = QSplitter(Qt.Horizontal)
+        top_history_splitter.setHandleWidth(12)
+        top_history_splitter.setStyleSheet("QSplitter::handle { background: transparent; }")
 
         # Sales History panel
-        sales_frame, sales_vl = self._section_panel("Sales History")
+        sales_frame, sales_vl, _ = self._section_panel(
+            "Sales History", "🛒", t.primary)
         self.sales_search = QLineEdit()
         self.sales_search.setPlaceholderText("Search by Invoice #, Customer, Status…")
         self.sales_search.setClearButtonEnabled(True)
@@ -208,11 +265,11 @@ class ReportsPage(QWidget):
         self.sales_table = QTableWidget()
         self.sales_table.setColumnCount(5)
         self.sales_table.setHorizontalHeaderLabels(
-            ["Invoice #", "Date & Time", "Customer", "Total", "Status"])
+            ["Invoice #", "Date & Time", "Customer", "Status", "Total Amount"])
         self.sales_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        for col, w in [(0, 100), (1, 130), (3, 100), (4, 75)]:
+        for col, w in [(0, 100), (1, 130), (3, 90), (4, 100)]:
             self.sales_table.setColumnWidth(col, w)
-        theme.apply_table_style(self.sales_table, max_height=480)
+        theme.apply_table_style(self.sales_table, max_height=300)
         self._sales_empty_lbl = theme.make_empty_label("No sales invoices yet.")
         self._sales_empty_search_lbl = theme.make_empty_label("No results match your search.")
         sales_vl.addWidget(self.sales_table)
@@ -220,10 +277,15 @@ class ReportsPage(QWidget):
         sales_vl.addWidget(self._sales_empty_search_lbl)
         self._sales_empty_lbl.hide()
         self._sales_empty_search_lbl.hide()
-        history_splitter.addWidget(sales_frame)
+
+        (self._sales_showing_lbl, self._sales_prev_btn,
+         self._sales_page_btn, self._sales_next_btn) = self._add_pagination_footer(sales_vl, "sales")
+
+        top_history_splitter.addWidget(sales_frame)
 
         # Purchases History panel
-        purchases_frame, purchases_vl = self._section_panel("Purchases History")
+        purchases_frame, purchases_vl, _ = self._section_panel(
+            "Purchases History", "📋", t.primary)
         self.purchases_search = QLineEdit()
         self.purchases_search.setPlaceholderText("Search by Invoice #, Supplier, Status…")
         self.purchases_search.setClearButtonEnabled(True)
@@ -232,11 +294,11 @@ class ReportsPage(QWidget):
         self.purchases_table = QTableWidget()
         self.purchases_table.setColumnCount(5)
         self.purchases_table.setHorizontalHeaderLabels(
-            ["Invoice #", "Date & Time", "Supplier", "Total", "Status"])
+            ["Invoice #", "Date & Time", "Supplier", "Status", "Total Amount"])
         self.purchases_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        for col, w in [(0, 100), (1, 130), (3, 100), (4, 75)]:
+        for col, w in [(0, 100), (1, 130), (3, 90), (4, 100)]:
             self.purchases_table.setColumnWidth(col, w)
-        theme.apply_table_style(self.purchases_table, max_height=480)
+        theme.apply_table_style(self.purchases_table, max_height=300)
         self._purchases_empty_lbl = theme.make_empty_label("No purchase invoices yet.")
         self._purchases_empty_search_lbl = theme.make_empty_label("No results match your search.")
         purchases_vl.addWidget(self.purchases_table)
@@ -244,33 +306,42 @@ class ReportsPage(QWidget):
         purchases_vl.addWidget(self._purchases_empty_search_lbl)
         self._purchases_empty_lbl.hide()
         self._purchases_empty_search_lbl.hide()
-        history_splitter.addWidget(purchases_frame)
 
-        # Expenses History panel
-        expenses_frame, expenses_vl = self._section_panel("Expenses History")
-        expenses_filter_row = QHBoxLayout()
-        expenses_filter_row.setSpacing(theme._active.spacing_sm)
+        (self._purchases_showing_lbl, self._purchases_prev_btn,
+         self._purchases_page_btn, self._purchases_next_btn) = self._add_pagination_footer(purchases_vl, "purchases")
+
+        top_history_splitter.addWidget(purchases_frame)
+        layout.addWidget(top_history_splitter)
+
+        # ── Expenses History (full width) ─────────────────────────────
+        expenses_frame, expenses_vl, expenses_hdr_hbox = self._section_panel(
+            "Expenses History", "📅", t.primary)
+
+        # Add category + search to the right of the header row
+        expenses_hdr_hbox.addStretch()
         cat_lbl = QLabel("Category:")
-        cat_lbl.setStyleSheet(
-            f"color: {theme._active.text_secondary}; background: transparent;")
-        expenses_filter_row.addWidget(cat_lbl)
+        cat_lbl.setStyleSheet(f"color: {t.text_secondary}; background: transparent; border: none;")
+        expenses_hdr_hbox.addWidget(cat_lbl)
         self.category_combo = QComboBox()
         self.category_combo.addItem("All Categories")
+        self.category_combo.setFixedWidth(150)
         self.category_combo.currentIndexChanged.connect(self._on_expense_filter_changed)
-        expenses_filter_row.addWidget(self.category_combo, 1)
+        expenses_hdr_hbox.addWidget(self.category_combo)
         self.expense_search = QLineEdit()
         self.expense_search.setPlaceholderText("Search…")
         self.expense_search.setClearButtonEnabled(True)
+        self.expense_search.setFixedWidth(200)
         self.expense_search.textChanged.connect(self._on_expense_filter_changed)
-        expenses_filter_row.addWidget(self.expense_search, 1)
-        expenses_vl.addLayout(expenses_filter_row)
+        expenses_hdr_hbox.addWidget(self.expense_search)
 
         self.expenses_table = QTableWidget()
-        self.expenses_table.setColumnCount(3)
+        self.expenses_table.setColumnCount(5)
         self.expenses_table.setHorizontalHeaderLabels(
-            ["Invoice #", "Date & Time", "Total Amount"])
-        self.expenses_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        theme.apply_table_style(self.expenses_table, max_height=480)
+            ["Invoice #", "Date & Time", "Category", "Description", "Total Amount"])
+        self.expenses_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        for col, w in [(0, 110), (1, 140), (2, 130), (4, 120)]:
+            self.expenses_table.setColumnWidth(col, w)
+        theme.apply_table_style(self.expenses_table, max_height=300)
         self._expenses_empty_lbl = theme.make_empty_label("No expense invoices yet.")
         self._expenses_empty_search_lbl = theme.make_empty_label("No results match your search.")
         expenses_vl.addWidget(self.expenses_table)
@@ -278,28 +349,32 @@ class ReportsPage(QWidget):
         expenses_vl.addWidget(self._expenses_empty_search_lbl)
         self._expenses_empty_lbl.hide()
         self._expenses_empty_search_lbl.hide()
-        history_splitter.addWidget(expenses_frame)
 
-        layout.addWidget(history_splitter)
+        (self._expenses_showing_lbl, self._expenses_prev_btn,
+         self._expenses_page_btn, self._expenses_next_btn) = self._add_pagination_footer(expenses_vl, "expenses")
+
+        layout.addWidget(expenses_frame)
 
         # ── Top Performers ─────────────────────────────────────────────
         analytics_hdr = QLabel("Top Performers")
-        analytics_font = QFont(theme._active.font_family, theme._active.size_heading)
+        analytics_font = QFont(t.font_family, t.size_heading)
         analytics_font.setBold(True)
         analytics_hdr.setFont(analytics_font)
         analytics_hdr.setStyleSheet(
-            f"color: {theme._active.text_primary}; background: transparent;"
-            f" padding-top: {theme._active.spacing_xs}px;")
+            f"color: {t.text_primary}; background: transparent;"
+            f" padding-top: {t.spacing_xs}px;")
         layout.addWidget(analytics_hdr)
 
         top_splitter = QSplitter(Qt.Horizontal)
+        top_splitter.setHandleWidth(12)
+        top_splitter.setStyleSheet("QSplitter::handle { background: transparent; }")
 
-        for group_title, col_labels, attr in [
-            ("Top Selling Products",    ["Product", "Qty Sold"],      "top_sales_table"),
-            ("Top Purchased Products",  ["Product", "Qty Purchased"], "top_purchases_table"),
-            ("Top Expense Categories",  ["Category", "Total Amount"], "top_expenses_table"),
+        for group_title, icon, icon_color, col_labels, attr in [
+            ("Top Selling Products",   "📊", t.success,  ["Product", "Qty Sold"],      "top_sales_table"),
+            ("Top Purchased Products", "🛒", t.primary,  ["Product", "Qty Purchased"], "top_purchases_table"),
+            ("Top Expense Categories", "🕐", "#D97706",  ["Category", "Total Amount"], "top_expenses_table"),
         ]:
-            grp_frame, grp_vl = self._section_panel(group_title)
+            grp_frame, grp_vl, _ = self._section_panel(group_title, icon, icon_color)
             tbl = QTableWidget()
             tbl.setColumnCount(2)
             tbl.setHorizontalHeaderLabels(col_labels)
@@ -328,12 +403,66 @@ class ReportsPage(QWidget):
             lambda: setattr(self, '_last_active_table', 'expenses'))
         self.export_btn.clicked.connect(self._on_export_csv)
 
+        self._sales_prev_btn.clicked.connect(self._sales_prev_page)
+        self._sales_next_btn.clicked.connect(self._sales_next_page)
+        self._purchases_prev_btn.clicked.connect(self._purchases_prev_page)
+        self._purchases_next_btn.clicked.connect(self._purchases_next_page)
+        self._expenses_prev_btn.clicked.connect(self._expenses_prev_page)
+        self._expenses_next_btn.clicked.connect(self._expenses_next_page)
+
+    # ------------------------------------------------------------------
+    # Pagination helpers
+    # ------------------------------------------------------------------
+
+    def _sales_prev_page(self):
+        if self._sales_page > 0:
+            self._sales_page -= 1
+            self._render_sales_page()
+
+    def _sales_next_page(self):
+        total_pages = max(1, (len(self._sales_rows) + PAGE_SIZE - 1) // PAGE_SIZE)
+        if self._sales_page < total_pages - 1:
+            self._sales_page += 1
+            self._render_sales_page()
+
+    def _purchases_prev_page(self):
+        if self._purchases_page > 0:
+            self._purchases_page -= 1
+            self._render_purchases_page()
+
+    def _purchases_next_page(self):
+        total_pages = max(1, (len(self._purchases_rows) + PAGE_SIZE - 1) // PAGE_SIZE)
+        if self._purchases_page < total_pages - 1:
+            self._purchases_page += 1
+            self._render_purchases_page()
+
+    def _expenses_prev_page(self):
+        if self._expenses_page > 0:
+            self._expenses_page -= 1
+            self._render_expenses_page()
+
+    def _expenses_next_page(self):
+        total_pages = max(1, (len(self._expenses_rows) + PAGE_SIZE - 1) // PAGE_SIZE)
+        if self._expenses_page < total_pages - 1:
+            self._expenses_page += 1
+            self._render_expenses_page()
+
+    def _update_pagination(self, showing_lbl, prev_btn, page_btn, next_btn, page, total):
+        total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+        start = page * PAGE_SIZE + 1 if total > 0 else 0
+        end = min((page + 1) * PAGE_SIZE, total)
+        shown = end - start + 1 if total > 0 else 0
+        showing_lbl.setText(f"Showing {shown} of {total}")
+        page_btn.setText(str(page + 1))
+        prev_btn.setEnabled(page > 0)
+        next_btn.setEnabled(page < total_pages - 1)
+
     # ------------------------------------------------------------------
     # Filter helpers
     # ------------------------------------------------------------------
 
     def _on_filter_changed(self):
-        is_custom = self.filter_combo.currentText() == "Custom Range"
+        is_custom = self.filter_combo.currentText() == "Custom"
         self.from_date.setEnabled(is_custom)
         self.to_date.setEnabled(is_custom)
         self.apply_btn.setEnabled(is_custom)
@@ -371,7 +500,7 @@ class ReportsPage(QWidget):
             return str(start), str(today)
         elif preset == "This Month":
             return str(today.replace(day=1)), str(today)
-        elif preset == "Custom Range":
+        elif preset == "Custom":
             start = self.from_date.date().toPython()
             end = self.to_date.date().toPython()
             if start > end:
@@ -431,8 +560,18 @@ class ReportsPage(QWidget):
 
     def _populate_sales_table(self, start_date, end_date):
         search = self.sales_search.text().strip() or None
+        self._sales_rows = list(report_logic.get_sales_for_report(start_date, end_date, search))
+        self._sales_page = 0
+        self._render_sales_page()
+
+    def _render_sales_page(self):
+        rows = self._sales_rows
+        page = self._sales_page
+        start = page * PAGE_SIZE
+        page_rows = rows[start:start + PAGE_SIZE]
+
         self.sales_table.setRowCount(0)
-        for row in report_logic.get_sales_for_report(start_date, end_date, search):
+        for row in page_rows:
             r = self.sales_table.rowCount()
             self.sales_table.insertRow(r)
             inv_item = QTableWidgetItem(row["invoice_number"] or "")
@@ -444,9 +583,11 @@ class ReportsPage(QWidget):
             cust_item = QTableWidgetItem(cust)
             cust_item.setToolTip(cust)
             self.sales_table.setItem(r, 2, cust_item)
-            self.sales_table.setItem(r, 3, QTableWidgetItem(f"{row['total_amount']:,.2f}"))
-            self.sales_table.setItem(r, 4, QTableWidgetItem(row["status"] or ""))
-        has_rows = self.sales_table.rowCount() > 0
+            self.sales_table.setItem(r, 3, QTableWidgetItem(row["status"] or ""))
+            self.sales_table.setItem(r, 4, QTableWidgetItem(f"{row['total_amount']:,.2f}"))
+
+        search = self.sales_search.text().strip()
+        has_rows = len(rows) > 0
         self.sales_table.setVisible(has_rows)
         if not has_rows and search:
             self._sales_empty_lbl.hide(); self._sales_empty_search_lbl.show()
@@ -455,10 +596,24 @@ class ReportsPage(QWidget):
         else:
             self._sales_empty_lbl.hide(); self._sales_empty_search_lbl.hide()
 
+        self._update_pagination(
+            self._sales_showing_lbl, self._sales_prev_btn,
+            self._sales_page_btn, self._sales_next_btn, page, len(rows))
+
     def _populate_purchases_table(self, start_date, end_date):
         search = self.purchases_search.text().strip() or None
+        self._purchases_rows = list(report_logic.get_purchases_for_report(start_date, end_date, search))
+        self._purchases_page = 0
+        self._render_purchases_page()
+
+    def _render_purchases_page(self):
+        rows = self._purchases_rows
+        page = self._purchases_page
+        start = page * PAGE_SIZE
+        page_rows = rows[start:start + PAGE_SIZE]
+
         self.purchases_table.setRowCount(0)
-        for row in report_logic.get_purchases_for_report(start_date, end_date, search):
+        for row in page_rows:
             r = self.purchases_table.rowCount()
             self.purchases_table.insertRow(r)
             inv_item = QTableWidgetItem(row["invoice_number"] or "")
@@ -470,9 +625,11 @@ class ReportsPage(QWidget):
             sup_item = QTableWidgetItem(sup)
             sup_item.setToolTip(sup)
             self.purchases_table.setItem(r, 2, sup_item)
-            self.purchases_table.setItem(r, 3, QTableWidgetItem(f"{row['total_amount']:,.2f}"))
-            self.purchases_table.setItem(r, 4, QTableWidgetItem(row["status"] or ""))
-        has_rows = self.purchases_table.rowCount() > 0
+            self.purchases_table.setItem(r, 3, QTableWidgetItem(row["status"] or ""))
+            self.purchases_table.setItem(r, 4, QTableWidgetItem(f"{row['total_amount']:,.2f}"))
+
+        search = self.purchases_search.text().strip()
+        has_rows = len(rows) > 0
         self.purchases_table.setVisible(has_rows)
         if not has_rows and search:
             self._purchases_empty_lbl.hide(); self._purchases_empty_search_lbl.show()
@@ -481,13 +638,27 @@ class ReportsPage(QWidget):
         else:
             self._purchases_empty_lbl.hide(); self._purchases_empty_search_lbl.hide()
 
+        self._update_pagination(
+            self._purchases_showing_lbl, self._purchases_prev_btn,
+            self._purchases_page_btn, self._purchases_next_btn, page, len(rows))
+
     def _populate_expenses_table(self, start_date, end_date):
         cat_text = self.category_combo.currentText()
         category = None if cat_text == "All Categories" else cat_text
         search   = self.expense_search.text().strip() or None
+        self._expenses_rows = list(
+            expenses_logic.get_expenses_for_report(start_date, end_date, category, search))
+        self._expenses_page = 0
+        self._render_expenses_page()
+
+    def _render_expenses_page(self):
+        rows = self._expenses_rows
+        page = self._expenses_page
+        start = page * PAGE_SIZE
+        page_rows = rows[start:start + PAGE_SIZE]
 
         self.expenses_table.setRowCount(0)
-        for row in expenses_logic.get_expenses_for_report(start_date, end_date, category, search):
+        for row in page_rows:
             r = self.expenses_table.rowCount()
             self.expenses_table.insertRow(r)
             id_item = QTableWidgetItem(row["invoice_number"] or "")
@@ -495,9 +666,16 @@ class ReportsPage(QWidget):
             self.expenses_table.setItem(r, 0, id_item)
             self.expenses_table.setItem(r, 1, QTableWidgetItem(
                 (row["expense_datetime"] or "")[:16]))
-            self.expenses_table.setItem(r, 2, QTableWidgetItem(
+            items = expenses_logic.get_expense_items_by_invoice(row["id"])
+            category = items[0]["category"] if items else ""
+            description = items[0]["description"] if items else "-"
+            self.expenses_table.setItem(r, 2, QTableWidgetItem(category or ""))
+            self.expenses_table.setItem(r, 3, QTableWidgetItem(description or "-"))
+            self.expenses_table.setItem(r, 4, QTableWidgetItem(
                 f"{row['total_amount']:,.2f}"))
-        has_rows = self.expenses_table.rowCount() > 0
+
+        search = self.expense_search.text().strip()
+        has_rows = len(rows) > 0
         self.expenses_table.setVisible(has_rows)
         if not has_rows and search:
             self._expenses_empty_lbl.hide(); self._expenses_empty_search_lbl.show()
@@ -505,6 +683,10 @@ class ReportsPage(QWidget):
             self._expenses_empty_lbl.show(); self._expenses_empty_search_lbl.hide()
         else:
             self._expenses_empty_lbl.hide(); self._expenses_empty_search_lbl.hide()
+
+        self._update_pagination(
+            self._expenses_showing_lbl, self._expenses_prev_btn,
+            self._expenses_page_btn, self._expenses_next_btn, page, len(rows))
 
     def _populate_top_products(self, start_date, end_date):
         self.top_sales_table.setRowCount(0)

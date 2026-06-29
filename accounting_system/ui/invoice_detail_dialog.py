@@ -22,6 +22,8 @@ class InvoiceDetailDialog(QDialog):
         self._invoice_id = invoice_id
         self.setModal(True)
         self.setMinimumWidth(750)
+        label = "Sale Invoice Detail" if invoice_type == "sale" else "Purchase Invoice Detail"
+        self.setWindowTitle(label)
         self._build_ui()
         self._load_data()
 

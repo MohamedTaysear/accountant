@@ -105,6 +105,7 @@ class PurchasesPage(QWidget):
             theme._active.spacing_lg, theme._active.spacing_md,
             theme._active.spacing_lg, theme._active.spacing_md)
         add_layout.setSpacing(theme._active.spacing_md)
+        add_layout.setAlignment(Qt.AlignVCenter)
 
         self.product_combo = QComboBox()
         self.product_combo.setMinimumWidth(260)
@@ -239,6 +240,7 @@ class PurchasesPage(QWidget):
             self.table.setItem(r, 3, _item(_fmt(item['subtotal'])))
 
             remove_btn = QPushButton("Remove")
+            remove_btn.setMinimumWidth(theme._BTN_MIN_REMOVE)
             remove_btn.clicked.connect(
                 lambda checked=False, i=idx: self._on_remove_line(i))
             self.table.setCellWidget(r, 4, remove_btn)

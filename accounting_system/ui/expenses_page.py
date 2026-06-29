@@ -84,7 +84,7 @@ class ExpensesPage(QWidget):
         self.dt_edit.setCalendarPopup(True)
         self.dt_edit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
         self.dt_edit.setDateTime(_cairo_now_qdatetime())
-        self.dt_edit.setMaximumWidth(200)
+        self.dt_edit.setMinimumWidth(180)
         header_form.addRow("Date & Time:", self.dt_edit)
 
         hc_layout.addLayout(header_form)
@@ -112,6 +112,7 @@ class ExpensesPage(QWidget):
 
         row1 = QHBoxLayout()
         row1.setSpacing(theme._active.spacing_md)
+        row1.setAlignment(Qt.AlignVCenter)
 
         self.category_combo = QComboBox()
         self.category_combo.setEditable(True)
@@ -120,18 +121,18 @@ class ExpensesPage(QWidget):
 
         self.amount_edit = QLineEdit()
         self.amount_edit.setPlaceholderText("0.00")
-        self.amount_edit.setMaximumWidth(120)
+        self.amount_edit.setFixedWidth(410)
 
         row1.addWidget(_lbl("Category:"))
-        row1.addWidget(self.category_combo)
+        row1.addWidget(self.category_combo, 1)
         row1.addSpacing(theme._active.spacing_sm)
         row1.addWidget(_lbl("Amount:"))
         row1.addWidget(self.amount_edit)
-        row1.addStretch()
         add_card_outer.addLayout(row1)
 
         row2 = QHBoxLayout()
         row2.setSpacing(theme._active.spacing_md)
+        row2.setAlignment(Qt.AlignVCenter)
 
         self.description_edit = QLineEdit()
         self.description_edit.setPlaceholderText("Optional description")
@@ -143,7 +144,7 @@ class ExpensesPage(QWidget):
         self.add_line_btn.setProperty("class", "primary")
 
         row2.addWidget(_lbl("Description:"))
-        row2.addWidget(self.description_edit, 2)
+        row2.addWidget(self.description_edit, 3)
         row2.addWidget(_lbl("Notes:"))
         row2.addWidget(self.notes_edit, 1)
         row2.addWidget(self.add_line_btn)
@@ -194,8 +195,9 @@ class ExpensesPage(QWidget):
         self.save_btn  = QPushButton("Save Invoice")
         self.save_btn.setProperty("class", "primary")
 
-        footer.addWidget(self.total_label)
         footer.addStretch()
+        footer.addWidget(self.total_label)
+        footer.addSpacing(theme._active.spacing_xl)
         footer.addWidget(self.clear_btn)
         footer.addWidget(self.save_btn)
         footer_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -259,6 +261,7 @@ class ExpensesPage(QWidget):
             self.items_table.setItem(r, 2, _item(_fmt(item["amount"])))
             self.items_table.setItem(r, 3, _item(item["notes"]))
             remove_btn = QPushButton("Remove")
+            remove_btn.setMinimumWidth(theme._BTN_MIN_REMOVE)
             remove_btn.clicked.connect(
                 lambda checked=False, i=idx: self._on_remove_line(i))
             self.items_table.setCellWidget(r, 4, remove_btn)

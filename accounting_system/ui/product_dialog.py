@@ -23,7 +23,7 @@ class ProductDialog(QDialog):
         super().__init__(parent)
         self.product_id = product_id
         self.setWindowTitle("Edit Product" if product_id else "Add Product")
-        self.setFixedWidth(420)
+        self.setMinimumWidth(420)
         self._build_ui()
         if product_id:
             self._prefill(product_id)

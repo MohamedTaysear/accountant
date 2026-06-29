@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QLabel, QGraphicsDropShadowEffect, QStyledItemDelegate,
     QTableWidget, QAbstractItemView, QStyle,
-    QAbstractScrollArea, QSizePolicy,
+    QAbstractScrollArea, QSizePolicy, QHeaderView,
 )
 from PySide6.QtCore import Qt, QPointF, QTimer
 from PySide6.QtGui import QPainter, QFont, QColor
@@ -432,7 +432,7 @@ QSplitter::handle:vertical {{
 QCheckBox {{
     color: {t.text_primary};
     spacing: {t.spacing_sm}px;
-    min-height: 24px;
+    min-height: 30px;
 }}
 QCheckBox::indicator {{
     width: 16px;
@@ -618,6 +618,13 @@ _TABLE_MIN_HEIGHT = 68   # header row height + a small margin
 _TABLE_MAX_HEIGHT = 390  # ~12 data rows before vertical scroll starts
 _TABLE_HEADER_H   = 36   # approximate header section height
 
+_ACTIONS_COL_WIDTH  = 170  # fixed width for any Actions column (fits "Edit" + "Deactivate")
+_BTN_MIN_EDIT       = 55   # minimum width for "Edit" buttons
+_BTN_MIN_DELETE     = 62   # minimum width for "Delete" buttons
+_BTN_MIN_DEACTIVATE = 88   # minimum width for "Deactivate" buttons
+_BTN_MIN_ACTIVATE   = 70   # minimum width for "Activate" buttons
+_BTN_MIN_REMOVE     = 70   # minimum width for "Remove" buttons
+
 
 def _fit_table_height(table: QTableWidget, max_h: int) -> None:
     """Set the table's fixed height to exactly fit its rows, capped at max_h."""
@@ -626,6 +633,12 @@ def _fit_table_height(table: QTableWidget, max_h: int) -> None:
     content_h = hdr_h + table.rowCount() * row_h + 2  # +2 for frame border
     new_h     = max(_TABLE_MIN_HEIGHT, min(content_h, max_h))
     table.setFixedHeight(new_h)
+
+
+def apply_actions_column(table: QTableWidget, col: int) -> None:
+    """Set a fixed width on an Actions column and prevent user resize."""
+    table.setColumnWidth(col, _ACTIONS_COL_WIDTH)
+    table.horizontalHeader().setSectionResizeMode(col, QHeaderView.Fixed)
 
 
 def apply_table_style(table: QTableWidget,

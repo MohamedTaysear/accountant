@@ -50,6 +50,7 @@ class ProductsPage(QWidget):
         # ── Search / filter toolbar ──────────────────────────────────
         toolbar = QHBoxLayout()
         toolbar.setSpacing(theme._active.spacing_md)
+        toolbar.setAlignment(Qt.AlignVCenter)
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search products by name or category…")
         self.search_input.setMaximumWidth(400)
@@ -71,12 +72,13 @@ class ProductsPage(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.table.setColumnHidden(0, True)
         # Fixed widths — sized to fit uppercase header text at the theme font
-        for col, w in [(2, 100), (3, 132), (4, 122), (5, 100), (6, 112), (7, 95), (8, 128), (9, 72), (10, 152)]:
+        for col, w in [(2, 100), (3, 132), (4, 122), (5, 100), (6, 112), (7, 95), (8, 128), (9, 72)]:
             self.table.setColumnWidth(col, w)
         self.table.setStyleSheet(
             f"QTableWidget {{ border-radius: {theme._active.card_border_radius}px;"
             f" border: 1px solid {theme._active.border}; }}")
         theme.apply_table_style(self.table)
+        theme.apply_actions_column(self.table, 10)
 
         self._empty_lbl = theme.make_empty_label("No products added yet. Click '+ Add Product' to get started.")
         self._empty_search_lbl = theme.make_empty_label("No products match your search.")
@@ -141,22 +143,25 @@ class ProductsPage(QWidget):
         btn_layout.setSpacing(4)
 
         edit_btn = QPushButton("Edit")
-        edit_btn.setFixedWidth(50)
+        edit_btn.setMinimumWidth(theme._BTN_MIN_EDIT)
         edit_btn.clicked.connect(lambda: self._on_edit(product_id))
         btn_layout.addWidget(edit_btn)
 
         if products_db.is_product_referenced(product_id):
             if is_active:
                 action_btn = QPushButton("Deactivate")
+                action_btn.setMinimumWidth(theme._BTN_MIN_DEACTIVATE)
                 action_btn.setProperty("class", "destructive")
                 action_btn.clicked.connect(
                     lambda: self._on_deactivate(product_id))
             else:
                 action_btn = QPushButton("Activate")
+                action_btn.setMinimumWidth(theme._BTN_MIN_ACTIVATE)
                 action_btn.clicked.connect(
                     lambda: self._on_activate(product_id))
         else:
             action_btn = QPushButton("Delete")
+            action_btn.setMinimumWidth(theme._BTN_MIN_DELETE)
             action_btn.setProperty("class", "destructive")
             action_btn.clicked.connect(lambda: self._on_delete(product_id))
 

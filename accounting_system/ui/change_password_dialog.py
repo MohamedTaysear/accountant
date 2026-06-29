@@ -16,7 +16,7 @@ class ChangePasswordDialog(QDialog):
         super().__init__(parent)
         self.username = username
         self.setWindowTitle("Change Password")
-        self.setFixedWidth(400)
+        self.setMinimumWidth(400)
         self._build_ui()
 
     def _build_ui(self):
